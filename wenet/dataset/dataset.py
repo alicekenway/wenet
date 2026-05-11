@@ -13,9 +13,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from functools import partial
 import sys
+from functools import partial
 from typing import Optional
+
 from wenet.dataset import processor
 from wenet.dataset.datapipes import (WenetRawDatasetSource,
                                      WenetTarShardDatasetSource)
@@ -118,6 +119,7 @@ def Dataset(data_type,
     language_conf = conf.get('language_conf', {"limited_langs": ['zh', 'en']})
     dataset = dataset.map(partial(processor.detect_language, **language_conf))
     dataset = dataset.map(processor.detect_task)
+    dataset = dataset.map(processor.detect_itn)
 
     shuffle = conf.get('shuffle', True)
     if shuffle:
