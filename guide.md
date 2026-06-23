@@ -29,6 +29,13 @@ cd wenet-main
 
 Use Python **3.10** for all install paths below.
 
+Full pinned requirement files used below:
+
+- `requirements-onnx-cpu.txt`
+- `requirements-onnx-gpu-cu121.txt`
+- `requirements-onnx-gpu-cu118.txt`
+- `constraints-build.txt` for uv build isolation
+
 ---
 
 ## 2. Shared Dependency: sox
@@ -69,23 +76,9 @@ conda activate wenet-cpu
 # Install system/audio dependency
 conda install conda-forge::sox -y
 
-# Install WeNet dependencies
+# Install WeNet dependencies with pinned CPU PyTorch, NumPy, ONNX, and ONNX Runtime
 python -m pip install --upgrade pip
-python -m pip install -r requirements.txt
-
-# Install compatible CPU-only PyTorch stack
-python -m pip uninstall -y torch torchaudio torchvision
-python -m pip install \
-  torch==2.2.2 \
-  torchaudio==2.2.2 \
-  torchvision==0.17.2 \
-  --index-url https://download.pytorch.org/whl/cpu
-
-# Fix NumPy compatibility
-python -m pip install --force-reinstall "numpy==1.26.4"
-
-# Install ONNX dependencies
-python -m pip install onnx onnxruntime
+python -m pip install -r requirements-onnx-cpu.txt
 
 # Install WeNet itself
 python -m pip install -e .
@@ -121,27 +114,13 @@ conda activate wenet-gpu
 # Install system/audio dependency
 conda install conda-forge::sox -y
 
-# Install WeNet dependencies
+# Install WeNet dependencies with pinned CUDA PyTorch, NumPy, ONNX, and ONNX Runtime
 python -m pip install --upgrade pip
-python -m pip install -r requirements.txt
-
-# Install compatible CUDA PyTorch stack
-python -m pip uninstall -y torch torchaudio torchvision
-python -m pip install \
-  torch==2.2.2 \
-  torchaudio==2.2.2 \
-  torchvision==0.17.2 \
-  --index-url https://download.pytorch.org/whl/cu121
-
-# Fix NumPy compatibility
-python -m pip install --force-reinstall "numpy==1.26.4"
-
-# Install ONNX dependencies
-python -m pip install onnx onnxruntime
+python -m pip install -r requirements-onnx-gpu-cu121.txt
 
 # Optional: use this instead of onnxruntime if you need Python ONNX Runtime CUDA inference
 # python -m pip uninstall -y onnxruntime
-# python -m pip install onnx onnxruntime-gpu
+# python -m pip install onnxruntime-gpu==1.17.3
 
 # Install WeNet itself
 python -m pip install -e .
@@ -161,10 +140,10 @@ Expected PyTorch check:
 2.2.2+cu121
 ```
 
-If your machine requires CUDA 11.8 wheels instead, replace the PyTorch index URL with:
+If your machine requires CUDA 11.8 wheels instead, use:
 
 ```bash
---index-url https://download.pytorch.org/whl/cu118
+python -m pip install -r requirements-onnx-gpu-cu118.txt
 ```
 
 ---
@@ -187,22 +166,9 @@ cd wenet-main
 uv venv .venv-wenet-cpu --python 3.10
 source .venv-wenet-cpu/bin/activate
 
-# Install WeNet dependencies
-uv pip install -r requirements.txt
-
-# Install compatible CPU-only PyTorch stack
-uv pip uninstall torch torchaudio torchvision
-uv pip install \
-  torch==2.2.2 \
-  torchaudio==2.2.2 \
-  torchvision==0.17.2 \
-  --index-url https://download.pytorch.org/whl/cpu
-
-# Fix NumPy compatibility
-uv pip install --force-reinstall "numpy==1.26.4"
-
-# Install ONNX dependencies
-uv pip install onnx onnxruntime
+# Install WeNet dependencies with pinned CPU PyTorch, NumPy, ONNX, and ONNX Runtime
+# constraints-build.txt keeps openai-whisper==20231117 build-compatible.
+uv pip install -r requirements-onnx-cpu.txt --build-constraint constraints-build.txt
 
 # Install WeNet itself
 uv pip install -e .
@@ -241,26 +207,13 @@ cd wenet-main
 uv venv .venv-wenet-gpu --python 3.10
 source .venv-wenet-gpu/bin/activate
 
-# Install WeNet dependencies
-uv pip install -r requirements.txt
-
-# Install compatible CUDA PyTorch stack
-uv pip uninstall torch torchaudio torchvision
-uv pip install \
-  torch==2.2.2 \
-  torchaudio==2.2.2 \
-  torchvision==0.17.2 \
-  --index-url https://download.pytorch.org/whl/cu121
-
-# Fix NumPy compatibility
-uv pip install --force-reinstall "numpy==1.26.4"
-
-# Install ONNX dependencies
-uv pip install onnx onnxruntime
+# Install WeNet dependencies with pinned CUDA PyTorch, NumPy, ONNX, and ONNX Runtime
+# constraints-build.txt keeps openai-whisper==20231117 build-compatible.
+uv pip install -r requirements-onnx-gpu-cu121.txt --build-constraint constraints-build.txt
 
 # Optional: use this instead of onnxruntime if you need Python ONNX Runtime CUDA inference
 # uv pip uninstall onnxruntime
-# uv pip install onnx onnxruntime-gpu
+# uv pip install onnxruntime-gpu==1.17.3
 
 # Install WeNet itself
 uv pip install -e .
@@ -280,10 +233,10 @@ Expected PyTorch check:
 2.2.2+cu121
 ```
 
-If your machine requires CUDA 11.8 wheels instead, replace the PyTorch index URL with:
+If your machine requires CUDA 11.8 wheels instead, use:
 
 ```bash
---index-url https://download.pytorch.org/whl/cu118
+uv pip install -r requirements-onnx-gpu-cu118.txt --build-constraint constraints-build.txt
 ```
 
 ---
@@ -307,45 +260,25 @@ torch / torchaudio was installed with an incompatible CUDA runtime.
 CPU fix:
 
 ```bash
-python -m pip uninstall -y torch torchaudio torchvision
-python -m pip install \
-  torch==2.2.2 \
-  torchaudio==2.2.2 \
-  torchvision==0.17.2 \
-  --index-url https://download.pytorch.org/whl/cpu
+python -m pip install --force-reinstall -r requirements-onnx-cpu.txt
 ```
 
 GPU fix:
 
 ```bash
-python -m pip uninstall -y torch torchaudio torchvision
-python -m pip install \
-  torch==2.2.2 \
-  torchaudio==2.2.2 \
-  torchvision==0.17.2 \
-  --index-url https://download.pytorch.org/whl/cu121
+python -m pip install --force-reinstall -r requirements-onnx-gpu-cu121.txt
 ```
 
 For uv:
 
 ```bash
-uv pip uninstall torch torchaudio torchvision
-uv pip install \
-  torch==2.2.2 \
-  torchaudio==2.2.2 \
-  torchvision==0.17.2 \
-  --index-url https://download.pytorch.org/whl/cpu
+uv pip install --reinstall -r requirements-onnx-cpu.txt
 ```
 
 Or for GPU:
 
 ```bash
-uv pip uninstall torch torchaudio torchvision
-uv pip install \
-  torch==2.2.2 \
-  torchaudio==2.2.2 \
-  torchvision==0.17.2 \
-  --index-url https://download.pytorch.org/whl/cu121
+uv pip install --reinstall -r requirements-onnx-gpu-cu121.txt
 ```
 
 ---
@@ -372,18 +305,57 @@ uv pip install --force-reinstall "numpy==1.26.4"
 
 ---
 
+## Error: `No module named 'pkg_resources'` When Building `openai-whisper`
+
+Example:
+
+```text
+ModuleNotFoundError: No module named 'pkg_resources'
+Failed to build `openai-whisper==20231117`
+```
+
+Reason:
+
+```text
+openai-whisper==20231117 imports pkg_resources during setup, but newer setuptools versions no longer provide it.
+```
+
+uv fix:
+
+```bash
+uv pip install -r requirements-onnx-cpu.txt --build-constraint constraints-build.txt
+```
+
+If that still fails, build Whisper without isolation after installing the build tools into the environment:
+
+```bash
+uv pip install "setuptools==80.9.0" "wheel==0.45.1"
+uv pip install "openai-whisper==20231117" --no-build-isolation
+uv pip install -r requirements-onnx-cpu.txt
+```
+
+For pip:
+
+```bash
+python -m pip install "setuptools==80.9.0" "wheel==0.45.1"
+python -m pip install "openai-whisper==20231117" --no-build-isolation
+python -m pip install -r requirements-onnx-cpu.txt
+```
+
+---
+
 ## Error: `Please install onnx and onnxruntime!`
 
 Fix:
 
 ```bash
-python -m pip install onnx onnxruntime
+python -m pip install "onnx==1.16.0" "onnxruntime==1.17.3"
 ```
 
 For uv:
 
 ```bash
-uv pip install onnx onnxruntime
+uv pip install "onnx==1.16.0" "onnxruntime==1.17.3"
 ```
 
 ---

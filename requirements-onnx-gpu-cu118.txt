@@ -1,0 +1,39 @@
+# Full pinned requirements for WeNet ONNX export with CUDA 11.8 PyTorch.
+# This file includes wenet/requirements.txt dependencies plus the pinned
+# PyTorch, NumPy, ONNX, and ONNX Runtime versions used by this guide.
+
+--extra-index-url https://download.pytorch.org/whl/cu118
+
+setuptools==80.9.0
+wheel==0.45.1
+
+Pillow
+pyyaml>=5.1
+sentencepiece
+tensorboard
+tensorboardX
+textgrid
+pytest
+flake8==3.8.2
+flake8-bugbear
+flake8-comprehensions
+flake8-executable
+flake8-pyi==20.5.0
+mccabe
+pycodestyle==2.6.0
+pyflakes==2.2.0
+clang-format==17.0.6
+cpplint==1.6.1
+tqdm
+deepspeed>=0.14.0
+librosa
+openai-whisper==20231117
+pre-commit==3.5.0
+langid
+
+torch==2.2.2+cu118
+torchaudio==2.2.2+cu118
+torchvision==0.17.2+cu118
+numpy==1.26.4
+onnx==1.16.0
+onnxruntime==1.17.3
