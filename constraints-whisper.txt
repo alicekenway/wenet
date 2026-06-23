@@ -1,0 +1,3 @@
+# Build-time constraint for source packages with incomplete build metadata.
+# openai-whisper==20231117 imports pkg_resources while building.
+setuptools==80.9.0

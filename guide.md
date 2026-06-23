@@ -34,7 +34,7 @@ Full pinned requirement files used below:
 - `requirements-onnx-cpu.txt`
 - `requirements-onnx-gpu-cu121.txt`
 - `requirements-onnx-gpu-cu118.txt`
-- `constraints-build.txt` for uv build isolation
+- `constraints-whisper.txt` for uv build isolation
 
 ---
 
@@ -167,8 +167,8 @@ uv venv .venv-wenet-cpu --python 3.10
 source .venv-wenet-cpu/bin/activate
 
 # Install WeNet dependencies with pinned CPU PyTorch, NumPy, ONNX, and ONNX Runtime
-# constraints-build.txt keeps openai-whisper==20231117 build-compatible.
-uv pip install -r requirements-onnx-cpu.txt --build-constraint constraints-build.txt
+# constraints-whisper.txt keeps openai-whisper==20231117 build-compatible.
+uv pip install -r requirements-onnx-cpu.txt --build-constraint constraints-whisper.txt
 
 # Install WeNet itself
 uv pip install -e .
@@ -208,8 +208,8 @@ uv venv .venv-wenet-gpu --python 3.10
 source .venv-wenet-gpu/bin/activate
 
 # Install WeNet dependencies with pinned CUDA PyTorch, NumPy, ONNX, and ONNX Runtime
-# constraints-build.txt keeps openai-whisper==20231117 build-compatible.
-uv pip install -r requirements-onnx-gpu-cu121.txt --build-constraint constraints-build.txt
+# constraints-whisper.txt keeps openai-whisper==20231117 build-compatible.
+uv pip install -r requirements-onnx-gpu-cu121.txt --build-constraint constraints-whisper.txt
 
 # Optional: use this instead of onnxruntime if you need Python ONNX Runtime CUDA inference
 # uv pip uninstall onnxruntime
@@ -236,7 +236,7 @@ Expected PyTorch check:
 If your machine requires CUDA 11.8 wheels instead, use:
 
 ```bash
-uv pip install -r requirements-onnx-gpu-cu118.txt --build-constraint constraints-build.txt
+uv pip install -r requirements-onnx-gpu-cu118.txt --build-constraint constraints-whisper.txt
 ```
 
 ---
@@ -323,7 +323,7 @@ openai-whisper==20231117 imports pkg_resources during setup, but newer setuptool
 uv fix:
 
 ```bash
-uv pip install -r requirements-onnx-cpu.txt --build-constraint constraints-build.txt
+uv pip install -r requirements-onnx-cpu.txt --build-constraint constraints-whisper.txt
 ```
 
 If that still fails, build Whisper without isolation after installing the build tools into the environment:
