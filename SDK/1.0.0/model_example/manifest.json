@@ -1,0 +1,46 @@
+{
+  "sdk_model_version": 1,
+  "model_type": "wenet_ctc_streaming_onnx",
+  "sample_rate": 16000,
+  "feature_dim": 80,
+  "frame_length_ms": 25,
+  "frame_shift_ms": 10,
+  "subsampling_rate": 4,
+  "onnx": {
+    "encoder": "encoder.onnx",
+    "ctc": "",
+    "output_type": "log_prob",
+    "input_names": {
+      "chunk": "chunk",
+      "offset": "offset",
+      "att_cache": "att_cache",
+      "cnn_cache": "cnn_cache"
+    },
+    "output_names": {
+      "encoder_out": "output",
+      "att_cache": "r_att_cache",
+      "cnn_cache": "r_cnn_cache",
+      "log_probs": "log_probs"
+    }
+  },
+  "vocab": {
+    "tokens": "tokens.txt",
+    "words": "words.txt",
+    "blank_id": 0,
+    "sos_id": -1,
+    "eos_id": -1
+  },
+  "decoder": {
+    "type": "ctc_wfst",
+    "graph": "TLG.fst",
+    "beam": 16.0,
+    "lattice_beam": 10.0,
+    "max_active": 7000,
+    "min_active": 200,
+    "acoustic_scale": 1.0,
+    "lm_scale": 1.0,
+    "length_penalty": 0.0,
+    "blank_skip_thresh": 1.01,
+    "nbest": 1
+  }
+}

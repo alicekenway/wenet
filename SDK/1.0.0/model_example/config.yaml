@@ -1,0 +1,15 @@
+streaming:
+  chunk_size: 4
+  num_left_chunks: 2
+  endpoint_silence_ms: 800
+  max_segment_ms: 20000
+
+runtime:
+  intra_op_num_threads: 1
+  inter_op_num_threads: 1
+  enable_profiling: false
+
+postprocess:
+  lowercase: true
+  remove_bpe_marker: true
+  language_type: indo_european

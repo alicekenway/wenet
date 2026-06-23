@@ -1,0 +1,16 @@
+model_dir: /home/jinyang_wang/Dev/ASR/ASR_wenet/SDK/0.0.1/test_runs/onnx_recompiled_1/models/wfst_beam
+manifest: yes /home/jinyang_wang/Dev/ASR/ASR_wenet/SDK/0.0.1/test_runs/onnx_recompiled_1/models/wfst_beam/sdk_model.json
+runtime_dir: /home/jinyang_wang/Dev/ASR/ASR_wenet/SDK/0.0.1/test_runs/onnx_recompiled_1/models/wfst_beam/.
+sample_rate: 16000
+chunk_size: 16
+num_left_chunks: 16
+nbest: 1
+encoder.onnx: ok /home/jinyang_wang/Dev/ASR/ASR_wenet/SDK/0.0.1/test_runs/onnx_recompiled_1/models/wfst_beam/./encoder.onnx
+ctc.onnx: ok /home/jinyang_wang/Dev/ASR/ASR_wenet/SDK/0.0.1/test_runs/onnx_recompiled_1/models/wfst_beam/./ctc.onnx
+decoder.onnx: ok /home/jinyang_wang/Dev/ASR/ASR_wenet/SDK/0.0.1/test_runs/onnx_recompiled_1/models/wfst_beam/./decoder.onnx
+units.txt: ok /home/jinyang_wang/Dev/ASR/ASR_wenet/SDK/0.0.1/test_runs/onnx_recompiled_1/models/wfst_beam/units.txt
+TLG.fst: ok /home/jinyang_wang/Dev/ASR/ASR_wenet/SDK/0.0.1/test_runs/onnx_recompiled_1/models/wfst_beam/TLG.fst
+words.txt: ok /home/jinyang_wang/Dev/ASR/ASR_wenet/SDK/0.0.1/test_runs/onnx_recompiled_1/models/wfst_beam/words.txt
+status: OK
+wenet_linkage: static
+onnxruntime_linkage: dynamic

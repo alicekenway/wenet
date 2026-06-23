@@ -1,0 +1,18 @@
+{
+  "sdk_model_version": 1,
+  "backend": "wenet_onnxruntime_static_wenet_dynamic_ort",
+  "audio": {"sample_rate": 16000},
+  "wenet": {
+    "onnx_dir": ".",
+    "unit_path": "units.txt",
+    "dict_path": "words.txt",
+    "fst_path": "TLG.fst"
+  },
+  "decode": {
+    "chunk_size": 16,
+    "num_left_chunks": 16,
+    "nbest": 1
+  },
+  "runtime": {"enable_continuous_decoding": true},
+  "postprocess": {"language_type": "chs", "enable_timestamp": false}
+}

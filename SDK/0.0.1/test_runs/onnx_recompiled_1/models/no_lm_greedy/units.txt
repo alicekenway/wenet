@@ -1,0 +1,1 @@
+/home/jinyang_wang/Dev/ASR/ASR_wenet/model/wenet_efficient_conformer_aishell_v2/words.txt

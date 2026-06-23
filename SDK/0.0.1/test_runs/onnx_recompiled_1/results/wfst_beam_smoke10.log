@@ -1,0 +1,36 @@
+WARNING: Logging before InitGoogleLogging() is written to STDERR
+I0618 11:03:08.227430    32 onnx_asr_model.cc:148] Onnx Model Info:
+I0618 11:03:08.227543    32 onnx_asr_model.cc:149] 	encoder_output_size 256
+I0618 11:03:08.227546    32 onnx_asr_model.cc:150] 	num_blocks 12
+I0618 11:03:08.227547    32 onnx_asr_model.cc:151] 	head 8
+I0618 11:03:08.227550    32 onnx_asr_model.cc:152] 	cnn_module_kernel 15
+I0618 11:03:08.227550    32 onnx_asr_model.cc:153] 	subsampling_rate 2
+I0618 11:03:08.227551    32 onnx_asr_model.cc:154] 	right_context 2
+I0618 11:03:08.227552    32 onnx_asr_model.cc:155] 	sos 4232
+I0618 11:03:08.227555    32 onnx_asr_model.cc:156] 	eos 4232
+I0618 11:03:08.227555    32 onnx_asr_model.cc:157] 	is bidirectional decoder 1
+I0618 11:03:08.227557    32 onnx_asr_model.cc:158] 	chunk_size 16
+I0618 11:03:08.227559    32 onnx_asr_model.cc:159] 	num_left_chunks 16
+I0618 11:03:08.227560    32 onnx_asr_model.cc:162] Onnx Encoder:
+I0618 11:03:08.227574    32 onnx_asr_model.cc:54] 	Input 0 : name=chunk type=1 dims=1 -1 80 
+I0618 11:03:08.227582    32 onnx_asr_model.cc:54] 	Input 1 : name=offset type=7 dims=
+I0618 11:03:08.227586    32 onnx_asr_model.cc:54] 	Input 2 : name=required_cache_size type=7 dims=
+I0618 11:03:08.227591    32 onnx_asr_model.cc:54] 	Input 3 : name=att_cache type=1 dims=12 8 -1 64 
+I0618 11:03:08.227596    32 onnx_asr_model.cc:54] 	Input 4 : name=att_mask type=9 dims=1 1 -1 
+I0618 11:03:08.227648    32 onnx_asr_model.cc:73] 	Output 0 : name=output type=1 dims=-1 -1 256 
+I0618 11:03:08.227654    32 onnx_asr_model.cc:73] 	Output 1 : name=r_att_cache type=1 dims=-1 -1 -1 -1 
+I0618 11:03:08.227658    32 onnx_asr_model.cc:73] 	Output 2 : name=r_cnn_cache type=1 dims=12 0 0 14 
+I0618 11:03:08.227659    32 onnx_asr_model.cc:164] Onnx CTC:
+I0618 11:03:08.227664    32 onnx_asr_model.cc:54] 	Input 0 : name=hidden type=1 dims=1 -1 256 
+I0618 11:03:08.227669    32 onnx_asr_model.cc:73] 	Output 0 : name=probs type=1 dims=1 -1 4233 
+I0618 11:03:08.227671    32 onnx_asr_model.cc:166] Onnx Rescore:
+I0618 11:03:08.227677    32 onnx_asr_model.cc:54] 	Input 0 : name=hyps type=7 dims=-1 -1 
+I0618 11:03:08.227681    32 onnx_asr_model.cc:54] 	Input 1 : name=hyps_lens type=7 dims=-1 
+I0618 11:03:08.227687    32 onnx_asr_model.cc:54] 	Input 2 : name=encoder_out type=1 dims=1 -1 256 
+I0618 11:03:08.227691    32 onnx_asr_model.cc:73] 	Output 0 : name=score type=1 dims=-1 -1 4233 
+I0618 11:03:08.227694    32 onnx_asr_model.cc:73] 	Output 1 : name=r_score type=1 dims=-1 -1 4233 
+decoded_utterances 10
+failed_utterances 0
+audio_sec 26.43
+wall_sec 22.1118
+rtf 0.836617
