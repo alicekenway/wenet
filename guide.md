@@ -168,7 +168,10 @@ source .venv-wenet-cpu/bin/activate
 
 # Install WeNet dependencies with pinned CPU PyTorch, NumPy, ONNX, and ONNX Runtime
 # constraints-whisper.txt keeps openai-whisper==20231117 build-compatible.
-uv pip install -r requirements-onnx-cpu.txt --build-constraint constraints-whisper.txt
+uv pip install \
+  -r requirements-onnx-cpu.txt \
+  --build-constraint constraints-whisper.txt \
+  --index-strategy unsafe-best-match
 
 # Install WeNet itself
 uv pip install -e .
@@ -209,7 +212,10 @@ source .venv-wenet-gpu/bin/activate
 
 # Install WeNet dependencies with pinned CUDA PyTorch, NumPy, ONNX, and ONNX Runtime
 # constraints-whisper.txt keeps openai-whisper==20231117 build-compatible.
-uv pip install -r requirements-onnx-gpu-cu121.txt --build-constraint constraints-whisper.txt
+uv pip install \
+  -r requirements-onnx-gpu-cu121.txt \
+  --build-constraint constraints-whisper.txt \
+  --index-strategy unsafe-best-match
 
 # Optional: use this instead of onnxruntime if you need Python ONNX Runtime CUDA inference
 # uv pip uninstall onnxruntime
@@ -236,7 +242,10 @@ Expected PyTorch check:
 If your machine requires CUDA 11.8 wheels instead, use:
 
 ```bash
-uv pip install -r requirements-onnx-gpu-cu118.txt --build-constraint constraints-whisper.txt
+uv pip install \
+  -r requirements-onnx-gpu-cu118.txt \
+  --build-constraint constraints-whisper.txt \
+  --index-strategy unsafe-best-match
 ```
 
 ---
@@ -272,13 +281,13 @@ python -m pip install --force-reinstall -r requirements-onnx-gpu-cu121.txt
 For uv:
 
 ```bash
-uv pip install --reinstall -r requirements-onnx-cpu.txt
+uv pip install --reinstall -r requirements-onnx-cpu.txt --index-strategy unsafe-best-match
 ```
 
 Or for GPU:
 
 ```bash
-uv pip install --reinstall -r requirements-onnx-gpu-cu121.txt
+uv pip install --reinstall -r requirements-onnx-gpu-cu121.txt --index-strategy unsafe-best-match
 ```
 
 ---
@@ -305,6 +314,34 @@ uv pip install --force-reinstall "numpy==1.26.4"
 
 ---
 
+## Error: uv Cannot Resolve `setuptools==80.9.0`
+
+Example:
+
+```text
+No solution found when resolving dependencies:
+Because there is no version of setuptools==80.9.0
+```
+
+Reason:
+
+```text
+The PyTorch wheel index also contains setuptools, so uv stops at that index by default and does not check PyPI for the requested version.
+```
+
+Fix:
+
+```bash
+uv pip install \
+  -r requirements-onnx-gpu-cu121.txt \
+  --build-constraint constraints-whisper.txt \
+  --index-strategy unsafe-best-match
+```
+
+Use the same `--index-strategy unsafe-best-match` flag for `requirements-onnx-cpu.txt` or `requirements-onnx-gpu-cu118.txt`.
+
+---
+
 ## Error: `No module named 'pkg_resources'` When Building `openai-whisper`
 
 Example:
@@ -323,7 +360,10 @@ openai-whisper==20231117 imports pkg_resources during setup, but newer setuptool
 uv fix:
 
 ```bash
-uv pip install -r requirements-onnx-cpu.txt --build-constraint constraints-whisper.txt
+uv pip install \
+  -r requirements-onnx-cpu.txt \
+  --build-constraint constraints-whisper.txt \
+  --index-strategy unsafe-best-match
 ```
 
 If that still fails, build Whisper without isolation after installing the build tools into the environment:
@@ -331,7 +371,7 @@ If that still fails, build Whisper without isolation after installing the build 
 ```bash
 uv pip install "setuptools==80.9.0" "wheel==0.45.1"
 uv pip install "openai-whisper==20231117" --no-build-isolation
-uv pip install -r requirements-onnx-cpu.txt
+uv pip install -r requirements-onnx-cpu.txt --index-strategy unsafe-best-match
 ```
 
 For pip:
