@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.18)
-project(wenet_static_ort_dynamic_sdk VERSION 0.0.4 LANGUAGES C CXX)
+project(wenet_static_ort_dynamic_sdk VERSION 0.1.0 LANGUAGES C CXX)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -58,10 +58,12 @@ set(ASR_SDK_FLASHLIGHT_DECODER_SOURCES)
 if(ASR_SDK_ENABLE_FLASHLIGHT_DECODER)
   set(ASR_SDK_FLASHLIGHT_DECODER_SOURCES
     src/flashlight_decoder/decoded_hypothesis.cc
+    src/flashlight_decoder/debug_trace.cc
     src/flashlight_decoder/flashlight_asr_stream.cc
     src/flashlight_decoder/flashlight_decoder_resource.cc
     src/flashlight_decoder/flashlight_ctc_stream_decoder.cc
     src/flashlight_decoder/flashlight_result_mapper.cc
+    src/flashlight_decoder/kenlm_rescorer.cc
     src/flashlight_decoder/lexicon_loader.cc
     src/flashlight_decoder/output_sequence_mapper.cc
     src/flashlight_decoder/word_dictionary.cc
@@ -254,6 +256,17 @@ if(ASR_SDK_BUILD_TESTS AND ASR_SDK_ENABLE_FLASHLIGHT_DECODER)
   target_link_libraries(output_sequence_mapper_test PRIVATE asr_sdk::ctc_core)
   add_test(NAME output_sequence_mapper_test
            COMMAND output_sequence_mapper_test)
+
+  add_executable(debug_trace_test
+    test/debug_trace_test.cc
+  )
+  target_include_directories(debug_trace_test PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/src
+    ${CMAKE_CURRENT_SOURCE_DIR}/include
+  )
+  target_link_libraries(debug_trace_test PRIVATE asr_sdk::ctc_core)
+  add_test(NAME debug_trace_test
+           COMMAND debug_trace_test)
 
   add_executable(model_package_decoder_options_test
     test/model_package_decoder_options_test.cc

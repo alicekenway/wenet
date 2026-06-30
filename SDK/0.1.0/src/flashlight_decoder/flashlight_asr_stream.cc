@@ -4,8 +4,10 @@
 #include <exception>
 #include <memory>
 #include <stdexcept>
+#include <string>
 #include <utility>
 
+#include "flashlight_decoder/debug_trace.h"
 #include "flashlight_decoder/flashlight_ctc_stream_decoder.h"
 #include "frontend/feature_pipeline.h"
 #include "sherpa_onnx_wenet/streaming_ctc_backend.h"
@@ -53,7 +55,9 @@ void AppendFrameOrZeros(const std::vector<std::vector<float>>& frames,
 }
 
 AsrResult BuildAsrResult(const std::vector<DecodedHypothesis>& hyps,
-                         bool is_final) {
+                         bool is_final, bool debug,
+                         const std::vector<std::string>& logs,
+                         const std::string& error) {
   AsrResult result;
   result.is_final = is_final;
   for (const DecodedHypothesis& hyp : hyps) {
@@ -75,6 +79,9 @@ AsrResult BuildAsrResult(const std::vector<DecodedHypothesis>& hyps,
     result.text = result.nbest.front().text;
     result.confidence = result.nbest.front().score;
     result.tokens = result.nbest.front().tokens;
+  }
+  if (debug) {
+    result.raw_backend_json = BuildDebugJson(logs, error, hyps, is_final);
   }
   return result;
 }
@@ -111,11 +118,29 @@ struct FlashlightAsrStream::Impl {
   std::unique_ptr<StreamingCtcBackend> backend;
   std::unique_ptr<FlashlightCtcStreamDecoder> decoder;
   std::vector<std::vector<float>> feature_buffer;
+  std::vector<std::string> debug_logs;
+  std::string debug_error;
   int pending_new_frames = 0;
   int decoded_chunks = 0;
   bool initial_padding_sent = false;
   bool final_padding_sent = false;
   bool feature_input_finished_sent = false;
+
+  bool DebugEnabled() const { return shared && shared->config.debug; }
+
+  void AddDebugLog(std::string line) {
+    if (DebugEnabled()) {
+      debug_logs.push_back(std::move(line));
+    }
+  }
+
+  Status RecordStatus(Status status) {
+    if (DebugEnabled() && !status.ok()) {
+      debug_error = status.ToString();
+      debug_logs.push_back("error " + debug_error);
+    }
+    return status;
+  }
 };
 
 FlashlightAsrStream::FlashlightAsrStream(
@@ -131,6 +156,7 @@ Status FlashlightAsrStream::EnsureInitialized() {
   }
   try {
     impl_ = std::make_unique<Impl>(shared_);
+    impl_->AddDebugLog("stream_init");
     AcceptZeros(impl_->feature_pipeline.get(), shared_->config.sample_rate,
                 kInitialPaddingMs);
     impl_->initial_padding_sent = true;
@@ -161,6 +187,8 @@ Status FlashlightAsrStream::AcceptPcm16(const int16_t* samples,
     return status;
   }
   try {
+    impl_->AddDebugLog("accept_pcm samples=" + std::to_string(num_samples) +
+                       " sample_rate=" + std::to_string(sample_rate));
     if (num_samples > 0) {
       impl_->feature_pipeline->AcceptWaveform(
           samples, static_cast<int>(num_samples));
@@ -222,6 +250,10 @@ Status FlashlightAsrStream::ForwardCurrentWindow(bool final_padding) {
   }
 
   try {
+    impl_->AddDebugLog("forward_window final_padding=" +
+                       std::string(final_padding ? "true" : "false") +
+                       " buffered_frames=" +
+                       std::to_string(impl_->feature_buffer.size()));
     std::vector<float> chunk;
     chunk.reserve(static_cast<size_t>(window * dim));
     for (int frame = 0; frame < window; ++frame) {
@@ -235,8 +267,11 @@ Status FlashlightAsrStream::ForwardCurrentWindow(bool final_padding) {
     Status status = impl_->decoder->DecodeChunk(
         flat.data(), static_cast<int>(log_probs.size()), info.vocab_size);
     if (!status.ok()) {
-      return status;
+      return impl_->RecordStatus(status);
     }
+    impl_->AddDebugLog("decode_chunk frames=" +
+                       std::to_string(log_probs.size()) + " vocab=" +
+                       std::to_string(info.vocab_size));
 
     if (final_padding) {
       impl_->feature_buffer.clear();
@@ -265,11 +300,14 @@ Status FlashlightAsrStream::EmitPartialIfAvailable() {
   }
   auto partial_or = impl_->decoder->PartialResult();
   if (!partial_or.ok()) {
-    return partial_or.status();
+    return impl_->RecordStatus(partial_or.status());
   }
   std::vector<DecodedHypothesis> hyps;
   hyps.push_back(std::move(partial_or).value());
-  last_result_ = BuildAsrResult(hyps, false);
+  impl_->AddDebugLog("partial_result text=" +
+                     JoinWords(hyps.front().mapped_words, " "));
+  last_result_ = BuildAsrResult(hyps, false, impl_->DebugEnabled(),
+                                impl_->debug_logs, impl_->debug_error);
   return Status::Ok();
 }
 
@@ -286,14 +324,19 @@ Status FlashlightAsrStream::FinalizeIfReady() {
   if (impl_->pending_new_frames > 0 || impl_->decoded_chunks == 0) {
     Status status = ForwardCurrentWindow(/*final_padding=*/true);
     if (!status.ok()) {
-      return status;
+      return impl_->RecordStatus(status);
     }
   }
+  impl_->AddDebugLog("finalize_start");
   auto hyps_or = impl_->decoder->Finalize();
   if (!hyps_or.ok()) {
-    return hyps_or.status();
+    return impl_->RecordStatus(hyps_or.status());
   }
-  final_result_ = BuildAsrResult(hyps_or.value(), true);
+  const auto& hyps = hyps_or.value();
+  impl_->AddDebugLog("rescore_nbest count=" + std::to_string(hyps.size()));
+  impl_->AddDebugLog("finalize_done nbest=" + std::to_string(hyps.size()));
+  final_result_ = BuildAsrResult(hyps, true, impl_->DebugEnabled(),
+                                 impl_->debug_logs, impl_->debug_error);
   last_result_ = final_result_;
   final_emitted_ = true;
   return Status::Ok();

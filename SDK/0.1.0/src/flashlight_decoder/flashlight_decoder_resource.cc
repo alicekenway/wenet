@@ -52,7 +52,9 @@ FlashlightDecoderResource::FlashlightDecoderResource(
     const std::filesystem::path& words_path,
     const std::filesystem::path& lexicon_path,
     const std::filesystem::path& lm_path,
-    const std::filesystem::path& mapping_path, FlashlightDecoderOptions options,
+    const std::filesystem::path& am_mapping_path,
+    const std::filesystem::path& final_mapping_path,
+    FlashlightDecoderOptions options,
     std::string blank_token, std::string sil_token, std::string unk_word)
     : am_tokens_(tokens_path),
       output_words_(words_path),
@@ -81,16 +83,13 @@ FlashlightDecoderResource::FlashlightDecoderResource(
       std::make_shared<fl::lib::text::Trie>(am_tokens_.Size(), sil_id_);
 
   const auto entries = LoadLexicon(lexicon_path, output_words_, am_tokens_);
-  auto start_state = word_lm_->start(false);
   for (const LexiconEntry& entry : entries) {
-    fl::lib::text::LMStatePtr ignored_state;
-    float score = 0.0f;
-    std::tie(ignored_state, score) = word_lm_->score(start_state, entry.word_id);
-    lexicon_trie_->insert(entry.token_ids, entry.word_id, score);
+    lexicon_trie_->insert(entry.token_ids, entry.word_id, 0.0f);
   }
   lexicon_entry_count_ = static_cast<int>(entries.size());
   lexicon_trie_->smear(SmearingModeFromString(options_.smearing));
-  output_mapper_ = OutputSequenceMapper::Load(mapping_path, output_words_);
+  am_mapper_ = OutputSequenceMapper::Load(am_mapping_path, output_words_);
+  final_mapper_ = OutputSequenceMapper::Load(final_mapping_path, output_words_);
 }
 
 }  // namespace asr_sdk::internal::flashlight_decoder

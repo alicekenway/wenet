@@ -65,11 +65,12 @@ StatusOr<std::unique_ptr<AsrEngine>> CreateFlashlightEngine(
   try {
     const internal::flashlight_decoder::FlashlightDecoderOptions options =
         package.flashlight_options;
-    auto decoder_resource =
-        std::make_shared<internal::flashlight_decoder::FlashlightDecoderResource>(
-            package.tokens_txt, package.words_txt, package.lexicon_txt,
-            package.kenlm_bin, package.output_mapping_txt, options,
-            package.blank_token, package.sil_token, package.unk_word);
+	    auto decoder_resource =
+	        std::make_shared<internal::flashlight_decoder::FlashlightDecoderResource>(
+	            package.tokens_txt, package.words_txt, package.lexicon_txt,
+	            package.kenlm_bin, package.output_mapping_txt,
+	            package.final_output_mapping_txt, options, package.blank_token,
+	            package.sil_token, package.unk_word);
     auto backend_template =
         internal::sherpa_onnx_wenet::CreateStreamingCtcBackend(
             package.sherpa_ctc_onnx.string(), config.num_threads,
@@ -81,9 +82,10 @@ StatusOr<std::unique_ptr<AsrEngine>> CreateFlashlightEngine(
     }
 
     EngineConfig resolved = config;
-    resolved.model_dir = package.root.string();
-    resolved.sample_rate = package.sample_rate;
-    resolved.nbest = package.nbest;
+	    resolved.model_dir = package.root.string();
+	    resolved.sample_rate = package.sample_rate;
+	    resolved.nbest = package.nbest;
+    resolved.debug = config.debug || package.debug;
     auto shared =
         std::make_shared<internal::flashlight_decoder::FlashlightAsrResources>();
     shared->backend_template =

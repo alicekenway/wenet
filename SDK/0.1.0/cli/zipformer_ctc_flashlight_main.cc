@@ -39,6 +39,7 @@ struct Args {
   std::string lexicon;
   std::string lm;
   std::string mapping;
+  std::string final_mapping;
   std::string wav;
   std::string blank_token = "<blk>";
   std::string sil_token = "▁";
@@ -61,8 +62,9 @@ void Usage(const char* argv0) {
   std::cerr
       << "usage: " << argv0
       << " --model model.onnx --tokens tokens.txt --words words.txt"
-         " --lexicon lexicon.txt --lm lm.bin --wav test.wav"
-         " [--mapping output_mapping.txt] [--blank_token <blk>]"
+	         " --lexicon lexicon.txt --lm lm.bin --wav test.wav"
+	         " [--mapping output_mapping.txt]"
+         " [--final_mapping final_output_mapping.txt] [--blank_token <blk>]"
          " [--sil_token ▁] [--beam_size 50] [--beam_size_token 20]"
          " [--beam_threshold 25] [--lm_weight 1.5]"
          " [--word_score -0.5] [--unk_score -5] [--sil_score 0]"
@@ -91,9 +93,11 @@ bool ParseArgs(int argc, char** argv, Args* args) {
       if (!NeedValue(argc, argv, &i, &args->lexicon)) return false;
     } else if (key == "--lm") {
       if (!NeedValue(argc, argv, &i, &args->lm)) return false;
-    } else if (key == "--mapping") {
-      if (!NeedValue(argc, argv, &i, &args->mapping)) return false;
-    } else if (key == "--wav") {
+	    } else if (key == "--mapping") {
+	      if (!NeedValue(argc, argv, &i, &args->mapping)) return false;
+    } else if (key == "--final_mapping") {
+      if (!NeedValue(argc, argv, &i, &args->final_mapping)) return false;
+	    } else if (key == "--wav") {
       if (!NeedValue(argc, argv, &i, &args->wav)) return false;
     } else if (key == "--blank_token") {
       if (!NeedValue(argc, argv, &i, &args->blank_token)) return false;
@@ -329,9 +333,10 @@ int main(int argc, char** argv) {
     }
     Zipformer2CtcOnnxBackend backend(acoustic_resource);
 
-    auto decoder_resource = std::make_shared<FlashlightDecoderResource>(
-        args.tokens, args.words, args.lexicon, args.lm, args.mapping,
-        args.decoder, args.blank_token, args.sil_token, args.unk_word);
+	    auto decoder_resource = std::make_shared<FlashlightDecoderResource>(
+	        args.tokens, args.words, args.lexicon, args.lm, args.mapping,
+	        args.final_mapping, args.decoder, args.blank_token, args.sil_token,
+	        args.unk_word);
     FlashlightCtcStreamDecoder decoder(decoder_resource);
 
     int num_chunks = 0;
@@ -377,8 +382,10 @@ int main(int argc, char** argv) {
     std::cout << "output_frame_shift_ms: " << output_frame_shift_ms << "\n";
     std::cout << "lexicon entries: "
               << decoder_resource->LexiconEntryCount() << "\n";
-    std::cout << "mapping rules: " << decoder_resource->Mapper().RuleCount()
-              << "\n";
+    std::cout << "am mapping rules: "
+              << decoder_resource->AmMapper().RuleCount() << "\n";
+    std::cout << "final mapping rules: "
+              << decoder_resource->FinalMapper().RuleCount() << "\n";
     std::cout << "feature RTF: " << feature_sec / audio_sec << "\n";
     std::cout << "forward RTF: " << forward_sec / audio_sec << "\n";
     std::cout << "search RTF: " << search_sec / audio_sec << "\n";

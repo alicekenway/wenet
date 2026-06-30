@@ -4,8 +4,9 @@ set -euo pipefail
 ROOT=/home/jinyang_wang/Dev/ASR/ASR_wenet
 AM_DIR="${AM_DIR:-${ROOT}/model/sherpa-onnx-streaming-zipformer-ctc-zh-2025-06-30}"
 LM_DIR="${LM_DIR:-${ROOT}/LM/kenlm_lm}"
-OUT_DIR="${OUT_DIR:-${ROOT}/test/0.0.4/model_flashlight}"
+OUT_DIR="${OUT_DIR:-${ROOT}/test/0.1.0/model_flashlight}"
 MAPPING="${MAPPING:-}"
+FINAL_MAPPING="${FINAL_MAPPING:-}"
 BEAM_SIZE="${BEAM_SIZE:-50}"
 BEAM_SIZE_TOKEN="${BEAM_SIZE_TOKEN:-20}"
 BEAM_THRESHOLD="${BEAM_THRESHOLD:-25}"
@@ -18,6 +19,7 @@ ALLOW_UNK="${ALLOW_UNK:-true}"
 SMEARING="${SMEARING:-max}"
 NBEST="${NBEST:-1}"
 FEATURE_TYPE="${FEATURE_TYPE:-whisper}"
+DEBUG="${DEBUG:-false}"
 BLANK_TOKEN="${BLANK_TOKEN:-<blk>}"
 SIL_TOKEN="${SIL_TOKEN:-▁}"
 UNK_WORD="${UNK_WORD:-<unk>}"
@@ -80,6 +82,13 @@ else
   : > "${OUT_DIR}/output_mapping.txt"
 fi
 
+if [[ -n "${FINAL_MAPPING}" ]]; then
+  require_file "${FINAL_MAPPING}"
+  copy_runtime_file "${FINAL_MAPPING}" "${OUT_DIR}/final_output_mapping.txt"
+else
+  : > "${OUT_DIR}/final_output_mapping.txt"
+fi
+
 cat > "${OUT_DIR}/sdk_model.json" <<JSON
 {
   "decoder_type": "flashlight_lexicon_kenlm",
@@ -89,6 +98,7 @@ cat > "${OUT_DIR}/sdk_model.json" <<JSON
   "lexicon": "lexicon.txt",
   "lm": "lm.bin",
   "mapping": "output_mapping.txt",
+  "final_mapping": "final_output_mapping.txt",
   "feature_type": "${FEATURE_TYPE}",
   "blank_token": "${BLANK_TOKEN}",
   "sil_token": "${SIL_TOKEN}",
@@ -104,12 +114,14 @@ cat > "${OUT_DIR}/sdk_model.json" <<JSON
   "log_add": ${LOG_ADD},
   "allow_unk": ${ALLOW_UNK},
   "smearing": "${SMEARING}",
-  "nbest": ${NBEST}
+  "nbest": ${NBEST},
+  "debug": ${DEBUG}
 }
 JSON
 
 sha256sum "${OUT_DIR}/model.onnx" "${OUT_DIR}/tokens.txt" \
   "${OUT_DIR}/words.txt" "${OUT_DIR}/lexicon.txt" "${OUT_DIR}/lm.bin" \
-  "${OUT_DIR}/output_mapping.txt" > "${OUT_DIR}/checksums.sha256"
+  "${OUT_DIR}/output_mapping.txt" "${OUT_DIR}/final_output_mapping.txt" \
+  > "${OUT_DIR}/checksums.sha256"
 
 echo "prepared package: ${OUT_DIR}"

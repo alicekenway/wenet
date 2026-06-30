@@ -22,7 +22,8 @@ class FlashlightDecoderResource {
       const std::filesystem::path& words_path,
       const std::filesystem::path& lexicon_path,
       const std::filesystem::path& lm_path,
-      const std::filesystem::path& mapping_path,
+      const std::filesystem::path& am_mapping_path,
+      const std::filesystem::path& final_mapping_path,
       FlashlightDecoderOptions options, std::string blank_token,
       std::string sil_token, std::string unk_word);
 
@@ -35,7 +36,9 @@ class FlashlightDecoderResource {
     return lexicon_trie_;
   }
   const fl::lib::text::LMPtr& WordLm() const { return word_lm_; }
-  const OutputSequenceMapper& Mapper() const { return output_mapper_; }
+  const OutputSequenceMapper& AmMapper() const { return am_mapper_; }
+  const OutputSequenceMapper& FinalMapper() const { return final_mapper_; }
+  const OutputSequenceMapper& Mapper() const { return final_mapper_; }
   const FlashlightDecoderOptions& Options() const { return options_; }
 
   int BlankId() const { return blank_id_; }
@@ -50,7 +53,8 @@ class FlashlightDecoderResource {
   fl::lib::text::Dictionary word_fl_dict_;
   std::shared_ptr<fl::lib::text::Trie> lexicon_trie_;
   fl::lib::text::LMPtr word_lm_;
-  OutputSequenceMapper output_mapper_;
+  OutputSequenceMapper am_mapper_;
+  OutputSequenceMapper final_mapper_;
   FlashlightDecoderOptions options_;
   int blank_id_ = 0;
   int sil_id_ = 0;

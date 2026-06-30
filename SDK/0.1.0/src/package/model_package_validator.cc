@@ -23,6 +23,15 @@ void AddFileLine(const char* label, const std::filesystem::path& path,
   report->ok = report->ok && ok;
 }
 
+void AddOptionalMappingLine(const char* label, const std::filesystem::path& path,
+                            ModelPackageReport* report) {
+  if (!path.empty() && FileExists(path)) {
+    AddFileLine(label, path, report);
+  } else {
+    report->lines.push_back(std::string(label) + ": identity");
+  }
+}
+
 Status RequireFile(const std::filesystem::path& path, const char* label) {
   if (!FileExists(path)) {
     return Status::NotFound(std::string(label) + " not found: " +
@@ -47,6 +56,14 @@ std::string LowerAscii(std::string value) {
   std::transform(value.begin(), value.end(), value.begin(),
                  [](unsigned char c) { return std::tolower(c); });
   return value;
+}
+
+int MappingRuleCount(const std::filesystem::path& path,
+                     const flashlight_decoder::WordDictionary& words) {
+  if (path.empty() || !FileExists(path)) {
+    return 0;
+  }
+  return flashlight_decoder::OutputSequenceMapper::Load(path, words).RuleCount();
 }
 
 Status ValidateFlashlightOptions(
@@ -118,12 +135,17 @@ Status ValidateFlashlightPackage(const ModelPackage& package) {
                                      package.unk_word);
     }
     (void)flashlight_decoder::LoadLexicon(package.lexicon_txt, words, tokens);
-    if (!package.output_mapping_txt.empty() &&
-        FileExists(package.output_mapping_txt)) {
+	    if (!package.output_mapping_txt.empty() &&
+	        FileExists(package.output_mapping_txt)) {
+	      (void)flashlight_decoder::OutputSequenceMapper::Load(
+	          package.output_mapping_txt, words);
+	    }
+    if (!package.final_output_mapping_txt.empty() &&
+        FileExists(package.final_output_mapping_txt)) {
       (void)flashlight_decoder::OutputSequenceMapper::Load(
-          package.output_mapping_txt, words);
+          package.final_output_mapping_txt, words);
     }
-  } catch (const std::exception& e) {
+	  } catch (const std::exception& e) {
     return Status::InvalidArgument(e.what());
   }
   return Status::Ok();
@@ -194,34 +216,30 @@ ModelPackageReport InspectModelPackage(const ModelPackage& package) {
     AddFileLine("model.onnx", package.sherpa_ctc_onnx, &report);
     AddFileLine("tokens.txt", package.tokens_txt, &report);
     AddFileLine("words.txt", package.words_txt, &report);
-    AddFileLine("lexicon.txt", package.lexicon_txt, &report);
-    AddFileLine("lm.bin", package.kenlm_bin, &report);
-    if (!package.output_mapping_txt.empty() &&
-        FileExists(package.output_mapping_txt)) {
-      AddFileLine("output_mapping.txt", package.output_mapping_txt, &report);
-    } else {
-      report.lines.push_back("output_mapping.txt: identity");
-    }
-    try {
-      sherpa_onnx_wenet::TokenTable tokens(package.tokens_txt);
-      flashlight_decoder::WordDictionary words(package.words_txt);
-      const auto lexicon =
-          flashlight_decoder::LoadLexicon(package.lexicon_txt, words, tokens);
-      int mapping_rules = 0;
-      if (!package.output_mapping_txt.empty() &&
-          FileExists(package.output_mapping_txt)) {
-        mapping_rules = flashlight_decoder::OutputSequenceMapper::Load(
-                            package.output_mapping_txt, words)
-                            .RuleCount();
-      }
-      report.lines.push_back("token count: " +
-                             std::to_string(tokens.ModelVocabSize()));
+	    AddFileLine("lexicon.txt", package.lexicon_txt, &report);
+	    AddFileLine("lm.bin", package.kenlm_bin, &report);
+    AddOptionalMappingLine("am_mapping", package.output_mapping_txt, &report);
+    AddOptionalMappingLine("final_mapping", package.final_output_mapping_txt,
+                           &report);
+	    try {
+	      sherpa_onnx_wenet::TokenTable tokens(package.tokens_txt);
+	      flashlight_decoder::WordDictionary words(package.words_txt);
+	      const auto lexicon =
+	          flashlight_decoder::LoadLexicon(package.lexicon_txt, words, tokens);
+      const int am_mapping_rules =
+          MappingRuleCount(package.output_mapping_txt, words);
+      const int final_mapping_rules =
+          MappingRuleCount(package.final_output_mapping_txt, words);
+	      report.lines.push_back("token count: " +
+	                             std::to_string(tokens.ModelVocabSize()));
       report.lines.push_back("word count: " + std::to_string(words.Size()));
       report.lines.push_back("lexicon entry count: " +
                              std::to_string(lexicon.size()));
-      report.lines.push_back("mapping rule count: " +
-                             std::to_string(mapping_rules));
-      report.lines.push_back("blank token/id: " + package.blank_token + "/" +
+      report.lines.push_back("am_mapping rule count: " +
+                             std::to_string(am_mapping_rules));
+      report.lines.push_back("final_mapping rule count: " +
+                             std::to_string(final_mapping_rules));
+	      report.lines.push_back("blank token/id: " + package.blank_token + "/" +
                              std::to_string(tokens.Id(package.blank_token)));
       report.lines.push_back("sil token/id: " + package.sil_token + "/" +
                              std::to_string(tokens.Id(package.sil_token)));
@@ -234,12 +252,14 @@ ModelPackageReport InspectModelPackage(const ModelPackage& package) {
                              std::to_string(options.beam_size_token));
       report.lines.push_back("decoder beam_threshold: " +
                              std::to_string(options.beam_threshold));
-      report.lines.push_back("decoder lm_weight: " +
-                             std::to_string(options.lm_weight));
-      report.lines.push_back("decoder word_score: " +
-                             std::to_string(options.word_score));
-      report.lines.push_back("decoder unk_score: " +
-                             std::to_string(options.unk_score));
+      report.lines.push_back(std::string("debug: ") +
+                             (package.debug ? "true" : "false"));
+	      report.lines.push_back("decoder lm_weight final KenLM rescore weight: " +
+	                             std::to_string(options.lm_weight));
+	      report.lines.push_back("decoder word_score final insertion score: " +
+	                             std::to_string(options.word_score));
+	      report.lines.push_back("decoder unk_score final unk penalty: " +
+	                             std::to_string(options.unk_score));
       report.lines.push_back("decoder sil_score: " +
                              std::to_string(options.sil_score));
       report.lines.push_back(std::string("decoder log_add: ") +

@@ -14,6 +14,7 @@ struct Args {
   std::string wav;
   int chunk_ms = 100;
   bool print_partial = true;
+  bool debug = false;
 };
 
 bool ParseBool(const std::string& value) {
@@ -23,8 +24,8 @@ bool ParseBool(const std::string& value) {
 
 void Usage(const char* argv0) {
   std::cerr << "usage: " << argv0
-            << " --model_dir DIR --wav WAV [--chunk_ms 100]"
-               " [--print_partial true]\n";
+	            << " --model_dir DIR --wav WAV [--chunk_ms 100]"
+	               " [--print_partial true] [--debug false]\n";
 }
 
 bool ParseArgs(int argc, char** argv, Args* args) {
@@ -45,11 +46,15 @@ bool ParseArgs(int argc, char** argv, Args* args) {
       std::string value;
       if (!need_value(&value)) return false;
       args->chunk_ms = std::max(1, std::atoi(value.c_str()));
-    } else if (key == "--print_partial") {
+	    } else if (key == "--print_partial") {
+	      std::string value;
+	      if (!need_value(&value)) return false;
+	      args->print_partial = ParseBool(value);
+    } else if (key == "--debug") {
       std::string value;
       if (!need_value(&value)) return false;
-      args->print_partial = ParseBool(value);
-    } else if (key == "--help" || key == "-h") {
+      args->debug = ParseBool(value);
+	    } else if (key == "--help" || key == "-h") {
       return false;
     } else {
       std::cerr << "unknown argument: " << key << "\n";
@@ -78,6 +83,7 @@ int main(int argc, char** argv) {
   asr_sdk::EngineConfig config;
   config.model_dir = args.model_dir;
   config.sample_rate = wav.sample_rate;
+  config.debug = args.debug;
   auto engine_or = asr_sdk::AsrEngine::Create(config);
   if (!engine_or.ok()) {
     std::cerr << engine_or.status().ToString() << "\n";
@@ -135,6 +141,9 @@ int main(int argc, char** argv) {
   const double audio_sec =
       static_cast<double>(wav.samples.size()) / wav.sample_rate;
   std::cout << "[final] " << final_result.text << "\n";
+  if (args.debug && !final_result.raw_backend_json.empty()) {
+    std::cerr << final_result.raw_backend_json << "\n";
+  }
   std::cout << "audio_sec: " << audio_sec << "\n";
   std::cout << "wall_sec: " << wall_sec << "\n";
   std::cout << "RTF: " << (wall_sec / audio_sec) << "\n";

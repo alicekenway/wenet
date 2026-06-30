@@ -18,8 +18,10 @@ struct DecodedHypothesis {
   double total_score = 0.0;
   double am_score = 0.0;
   double lm_score = 0.0;
+  double first_pass_score = 0.0;
   std::vector<int> token_ids;
   std::vector<DecodedWord> raw_words;
+  std::vector<DecodedWord> am_mapped_words;
   std::vector<DecodedWord> mapped_words;
 };
 

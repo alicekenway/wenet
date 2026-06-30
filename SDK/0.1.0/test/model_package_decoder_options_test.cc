@@ -42,6 +42,8 @@ int main() {
   "lexicon": "out.lexicon",
   "lm": "out.lm",
   "mapping": "",
+  "final_mapping": "final_output_mapping.txt",
+  "debug": true,
   "blank_token": "<blank>",
   "sil_token": "|",
   "unk_word": "<unknown>",
@@ -70,10 +72,13 @@ int main() {
   const auto& package = package_or.value();
   const auto& options = package.flashlight_options;
 
-  bool ok = true;
-  ok &= Expect(package.has_flashlight_decoder, "Flashlight decoder selected");
-  ok &= Expect(package.output_mapping_txt.empty(), "empty mapping disables mapping path");
-  ok &= Expect(package.blank_token == "<blank>", "blank token parsed");
+	  bool ok = true;
+	  ok &= Expect(package.has_flashlight_decoder, "Flashlight decoder selected");
+	  ok &= Expect(package.output_mapping_txt.empty(), "empty mapping disables mapping path");
+  ok &= Expect(package.final_output_mapping_txt == dir / "final_output_mapping.txt",
+               "final mapping path parsed");
+  ok &= Expect(package.debug, "debug parsed");
+	  ok &= Expect(package.blank_token == "<blank>", "blank token parsed");
   ok &= Expect(package.sil_token == "|", "sil token parsed");
   ok &= Expect(package.unk_word == "<unknown>", "unknown word parsed");
   ok &= Expect(package.nbest == 4, "package nbest parsed");

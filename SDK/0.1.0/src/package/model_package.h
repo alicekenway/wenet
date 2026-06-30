@@ -24,10 +24,12 @@ struct ModelPackage {
   std::filesystem::path lexicon_txt;
   std::filesystem::path kenlm_bin;
   std::filesystem::path output_mapping_txt;
+  std::filesystem::path final_output_mapping_txt;
   std::filesystem::path tlg_fst;
   bool has_manifest = false;
   bool has_wfst = false;
   bool has_flashlight_decoder = false;
+  bool debug = false;
   int sample_rate = 16000;
   int chunk_size = 16;
   int num_left_chunks = 16;

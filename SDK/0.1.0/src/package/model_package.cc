@@ -16,6 +16,10 @@ int PositiveOr(int value, int fallback) {
   return value > 0 ? value : fallback;
 }
 
+bool HasJsonKey(const std::string& json, const std::string& key) {
+  return json.find("\"" + key + "\"") != std::string::npos;
+}
+
 }  // namespace
 
 StatusOr<ModelPackage> LoadModelPackage(const EngineConfig& config) {
@@ -91,12 +95,13 @@ StatusOr<ModelPackage> LoadModelPackage(const EngineConfig& config) {
     package.flashlight_options.allow_unk =
         FindJsonBoolValue(manifest_json, "allow_unk",
                           package.flashlight_options.allow_unk);
-    package.flashlight_options.smearing =
-        NonEmptyOr(FindJsonStringValue(manifest_json, "smearing", ""),
-                   package.flashlight_options.smearing);
-    package.enable_continuous_decoding =
-        FindJsonBoolValue(manifest_json, "enable_continuous_decoding",
-                          package.enable_continuous_decoding);
+	    package.flashlight_options.smearing =
+	        NonEmptyOr(FindJsonStringValue(manifest_json, "smearing", ""),
+	                   package.flashlight_options.smearing);
+    package.debug = FindJsonBoolValue(manifest_json, "debug", false);
+	    package.enable_continuous_decoding =
+	        FindJsonBoolValue(manifest_json, "enable_continuous_decoding",
+	                          package.enable_continuous_decoding);
     package.enable_timestamps =
         FindJsonBoolValue(manifest_json, "enable_timestamp",
                           package.enable_timestamps);
@@ -135,24 +140,41 @@ StatusOr<ModelPackage> LoadModelPackage(const EngineConfig& config) {
     package.lexicon_txt = ResolveUnder(
         package.root,
         FindJsonStringValue(manifest_json, "lexicon", "lexicon.txt"));
-    package.kenlm_bin = ResolveUnder(
-        package.root, FindJsonStringValue(manifest_json, "lm", "lm.bin"));
-    const std::string mapping =
-        FindJsonStringValue(manifest_json, "mapping", "output_mapping.txt");
-    package.output_mapping_txt =
-        mapping.empty() ? std::filesystem::path()
-                        : ResolveUnder(package.root, mapping);
-    package.tlg_fst = ResolveUnder(
-        package.root, FindJsonStringValue(manifest_json, "fst_path", "TLG.fst"));
+	    package.kenlm_bin = ResolveUnder(
+	        package.root, FindJsonStringValue(manifest_json, "lm", "lm.bin"));
+    const bool has_mapping_key = HasJsonKey(manifest_json, "mapping");
+    const std::string mapping = FindJsonStringValue(
+        manifest_json, "mapping",
+        has_mapping_key ? "" : "output_mapping.txt");
+    if (!mapping.empty()) {
+      const auto mapping_path = ResolveUnder(package.root, mapping);
+      if (has_mapping_key || FileExists(mapping_path)) {
+        package.output_mapping_txt = mapping_path;
+      }
+    }
+    const std::string final_mapping =
+        FindJsonStringValue(manifest_json, "final_mapping", "");
+    package.final_output_mapping_txt =
+        final_mapping.empty() ? std::filesystem::path()
+                              : ResolveUnder(package.root, final_mapping);
+	    package.tlg_fst = ResolveUnder(
+	        package.root, FindJsonStringValue(manifest_json, "fst_path", "TLG.fst"));
   } else {
     package.units_txt = package.root / "units.txt";
     package.tokens_txt = package.root / "tokens.txt";
     package.words_txt = package.root / "words.txt";
-    package.sherpa_ctc_onnx = package.root / "model.onnx";
-    package.lexicon_txt = package.root / "lexicon.txt";
-    package.kenlm_bin = package.root / "lm.bin";
-    package.output_mapping_txt = package.root / "output_mapping.txt";
-    package.tlg_fst = package.root / "TLG.fst";
+	    package.sherpa_ctc_onnx = package.root / "model.onnx";
+	    package.lexicon_txt = package.root / "lexicon.txt";
+	    package.kenlm_bin = package.root / "lm.bin";
+    const auto mapping_path = package.root / "output_mapping.txt";
+    if (FileExists(mapping_path)) {
+      package.output_mapping_txt = mapping_path;
+    }
+    const auto final_mapping_path = package.root / "final_output_mapping.txt";
+    if (FileExists(final_mapping_path)) {
+      package.final_output_mapping_txt = final_mapping_path;
+    }
+	    package.tlg_fst = package.root / "TLG.fst";
     if (FileExists(package.sherpa_ctc_onnx) && FileExists(package.tokens_txt) &&
         FileExists(package.lexicon_txt) && FileExists(package.kenlm_bin)) {
       package.decoder_type = "flashlight_lexicon_kenlm";

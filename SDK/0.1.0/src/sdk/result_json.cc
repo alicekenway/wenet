@@ -30,7 +30,12 @@ std::string AsrResultToJson(const AsrResult& result) {
         << ",\"end_ms\":" << result.tokens[i].end_ms
         << ",\"confidence\":" << result.tokens[i].confidence << "}";
   }
-  out << "]}";
+  out << "]";
+  if (!result.raw_backend_json.empty()) {
+    out << ",\"raw_backend_json\":\""
+        << JsonEscape(result.raw_backend_json) << "\"";
+  }
+  out << "}";
   return out.str();
 }
 

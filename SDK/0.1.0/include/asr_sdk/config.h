@@ -15,6 +15,7 @@ struct EngineConfig {
   bool enable_continuous_decoding = true;
   bool enable_timestamps = false;
   std::string language = "chs";
+  bool debug = false;
 };
 
 }  // namespace asr_sdk

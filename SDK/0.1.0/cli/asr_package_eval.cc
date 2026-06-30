@@ -38,14 +38,17 @@ struct Args {
   std::string output_json;
   std::string wav_key;
   std::string text_key;
+  std::string debug_log;
   std::string decode_mode = "lm";
   int limit = 0;
   int num_threads = 1;
   int chunk_ms = 0;
+  bool debug = false;
 };
 
 struct DecodeOutput {
   std::string hyp;
+  std::string debug_json;
   double decode_sec = 0.0;
   std::string error;
 };
@@ -57,6 +60,7 @@ struct EvalRow {
   std::string wav_path;
   std::string ref;
   std::string hyp;
+  std::string debug_json;
   std::string error;
   double audio_sec = 0.0;
   double decode_sec = 0.0;
@@ -76,8 +80,13 @@ void Usage(const char* argv0) {
   std::cerr
       << "usage: " << argv0 << " --model_dir DIR --metadata metadata.jsonl"
       << " --wav_parent DIR --output_json OUT.jsonl"
-      << " [--decode_mode lm|greedy] [--limit N] [--num_threads N] [--chunk_ms N]"
-      << " [--wav_key KEY] [--text_key KEY]\n";
+      << " [--decode_mode lm|greedy] [--limit N] [--num_threads N]"
+      << " [--chunk_ms N] [--wav_key KEY] [--text_key KEY]"
+      << " [--debug false] [--debug_log PATH]\n";
+}
+
+bool ParseBool(const std::string& value) {
+  return value == "1" || value == "true" || value == "yes" || value == "on";
 }
 
 bool NeedValue(int argc, char** argv, int* i, std::string* out) {
@@ -112,15 +121,23 @@ bool ParseArgs(int argc, char** argv, Args* args) {
     } else if (key == "--num_threads") {
       if (!NeedValue(argc, argv, &i, &value)) return false;
       args->num_threads = std::max(1, std::atoi(value.c_str()));
-    } else if (key == "--chunk_ms") {
+	    } else if (key == "--chunk_ms") {
+	      if (!NeedValue(argc, argv, &i, &value)) return false;
+	      args->chunk_ms = std::max(0, std::atoi(value.c_str()));
+    } else if (key == "--debug") {
       if (!NeedValue(argc, argv, &i, &value)) return false;
-      args->chunk_ms = std::max(0, std::atoi(value.c_str()));
+      args->debug = ParseBool(value);
+    } else if (key == "--debug_log") {
+      if (!NeedValue(argc, argv, &i, &args->debug_log)) return false;
     } else {
       return false;
     }
   }
   if (args->decode_mode != "lm" && args->decode_mode != "greedy") {
     return false;
+  }
+  if (!args->debug_log.empty() && args->decode_mode == "lm") {
+    args->debug = true;
   }
   return !args->model_dir.empty() && !args->metadata.empty() &&
          !args->wav_parent.empty() && !args->output_json.empty();
@@ -181,6 +198,110 @@ std::string JsonNumber(double value) {
   std::ostringstream out;
   out << std::setprecision(10) << value;
   return out.str();
+}
+
+std::string CleanLogField(std::string value) {
+  for (char& c : value) {
+    if (c == '\n' || c == '\r' || c == '#') {
+      c = ' ';
+    }
+  }
+  return value;
+}
+
+size_t FindMatching(const std::string& text, size_t begin, char open,
+                    char close) {
+  bool in_string = false;
+  bool escaped = false;
+  int depth = 0;
+  for (size_t i = begin; i < text.size(); ++i) {
+    const char c = text[i];
+    if (in_string) {
+      if (escaped) {
+        escaped = false;
+      } else if (c == '\\') {
+        escaped = true;
+      } else if (c == '"') {
+        in_string = false;
+      }
+      continue;
+    }
+    if (c == '"') {
+      in_string = true;
+      continue;
+    }
+    if (c == open) {
+      ++depth;
+    } else if (c == close) {
+      --depth;
+      if (depth == 0) {
+        return i;
+      }
+    }
+  }
+  return std::string::npos;
+}
+
+std::vector<std::string> ExtractFinalNbestObjects(
+    const std::string& debug_json) {
+  std::vector<std::string> objects;
+  const size_t key = debug_json.find("\"final_nbest\"");
+  if (key == std::string::npos) {
+    return objects;
+  }
+  const size_t array_begin = debug_json.find('[', key);
+  if (array_begin == std::string::npos) {
+    return objects;
+  }
+  const size_t array_end = FindMatching(debug_json, array_begin, '[', ']');
+  if (array_end == std::string::npos) {
+    return objects;
+  }
+  size_t pos = array_begin + 1;
+  while (pos < array_end) {
+    const size_t object_begin = debug_json.find('{', pos);
+    if (object_begin == std::string::npos || object_begin >= array_end) {
+      break;
+    }
+    const size_t object_end = FindMatching(debug_json, object_begin, '{', '}');
+    if (object_end == std::string::npos || object_end > array_end) {
+      break;
+    }
+    objects.push_back(debug_json.substr(object_begin, object_end - object_begin + 1));
+    pos = object_end + 1;
+  }
+  return objects;
+}
+
+std::filesystem::path DefaultDebugLogPath(const std::string& output_json) {
+  std::filesystem::path path(output_json);
+  path.replace_extension(".debug.txt");
+  return path;
+}
+
+void WriteDebugLogBlock(std::ostream* out, const EvalRow& row) {
+  if (out == nullptr || row.debug_json.empty()) {
+    return;
+  }
+  *out << "ref#" << CleanLogField(row.wav_path) << "#"
+       << CleanLogField(row.ref) << "\n";
+  const std::vector<std::string> hyps =
+      ExtractFinalNbestObjects(row.debug_json);
+  if (hyps.empty()) {
+    *out << "hyp1#" << CleanLogField(row.hyp) << "##\n\n";
+    return;
+  }
+  for (size_t i = 0; i < hyps.size(); ++i) {
+    const std::string text =
+        asr_sdk::internal::FindJsonStringValue(hyps[i], "text", "");
+    const double am_score =
+        asr_sdk::internal::FindJsonDoubleValue(hyps[i], "am_score", 0.0);
+    const double lm_score =
+        asr_sdk::internal::FindJsonDoubleValue(hyps[i], "lm_score", 0.0);
+    *out << "hyp" << (i + 1) << "#" << CleanLogField(text) << "#"
+         << JsonNumber(am_score) << "#" << JsonNumber(lm_score) << "\n";
+  }
+  *out << "\n";
 }
 
 std::string AppendJsonFields(const EvalRow& row,
@@ -352,7 +473,9 @@ DecodeOutput DecodeOne(asr_sdk::AsrEngine* engine,
     out.error = status.ToString();
     return out;
   }
-  out.hyp = stream->GetFinalResult().text;
+  const auto final_result = stream->GetFinalResult();
+  out.hyp = final_result.text;
+  out.debug_json = final_result.raw_backend_json;
   return out;
 }
 
@@ -392,6 +515,7 @@ int main(int argc, char** argv) {
     asr_sdk::EngineConfig config;
     config.model_dir = args.model_dir;
     config.num_threads = args.num_threads;
+    config.debug = args.debug;
     auto engine_or = asr_sdk::AsrEngine::Create(config);
     if (!engine_or.ok()) {
       std::cerr << engine_or.status().ToString() << "\n";
@@ -423,6 +547,23 @@ int main(int argc, char** argv) {
   if (!output) {
     std::cerr << "failed to open output_json: " << args.output_json << "\n";
     return 1;
+  }
+
+  std::filesystem::path debug_log_path;
+  std::ofstream debug_log;
+  if (args.debug && args.decode_mode == "lm") {
+    debug_log_path = args.debug_log.empty()
+                         ? DefaultDebugLogPath(args.output_json)
+                         : std::filesystem::path(args.debug_log);
+    const auto debug_parent = debug_log_path.parent_path();
+    if (!debug_parent.empty()) {
+      std::filesystem::create_directories(debug_parent);
+    }
+    debug_log.open(debug_log_path);
+    if (!debug_log) {
+      std::cerr << "failed to open debug_log: " << debug_log_path << "\n";
+      return 1;
+    }
   }
 
   const std::filesystem::path wav_parent(args.wav_parent);
@@ -468,9 +609,10 @@ int main(int argc, char** argv) {
           args.decode_mode == "greedy"
               ? DecodeOneGreedy(greedy_context.get(), wav)
               : DecodeOne(engine.get(), wav, args.chunk_ms);
-      row.hyp = std::move(decode.hyp);
-      row.decode_sec = decode.decode_sec;
-      row.error = std::move(decode.error);
+	      row.hyp = std::move(decode.hyp);
+      row.debug_json = std::move(decode.debug_json);
+	      row.decode_sec = decode.decode_sec;
+	      row.error = std::move(decode.error);
       row.rtf = row.audio_sec > 0.0 ? row.decode_sec / row.audio_sec : 0.0;
     }
 
@@ -479,6 +621,9 @@ int main(int argc, char** argv) {
     failed += !row.error.empty() ? 1 : 0;
 
     output << AppendJsonFields(row, args.decode_mode) << "\n";
+    if (debug_log.is_open()) {
+      WriteDebugLogBlock(&debug_log, row);
+    }
     ++index;
     ++count;
     if (index % 100 == 0) {
@@ -495,5 +640,9 @@ int main(int argc, char** argv) {
                                       : 0.0)
             << "\n";
   std::cerr << "output_json " << args.output_json << "\n";
+  if (debug_log.is_open()) {
+    debug_log.flush();
+    std::cerr << "debug_log " << debug_log_path.string() << "\n";
+  }
   return failed == 0 ? 0 : 1;
 }

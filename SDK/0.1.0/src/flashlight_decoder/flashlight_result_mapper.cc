@@ -6,9 +6,10 @@ DecodedHypothesis ConvertFlashlightResult(
     const fl::lib::text::DecodeResult& result,
     const FlashlightDecoderResource& resource) {
   DecodedHypothesis hyp;
-  hyp.total_score = result.score;
+  hyp.first_pass_score = result.score;
+  hyp.total_score = result.emittingModelScore;
   hyp.am_score = result.emittingModelScore;
-  hyp.lm_score = result.lmScore;
+  hyp.lm_score = 0.0;
   hyp.token_ids.reserve(result.tokens.size());
   for (int token : result.tokens) {
     if (token >= 0) {
@@ -28,7 +29,8 @@ DecodedHypothesis ConvertFlashlightResult(
     word.end_frame = frame + 1;
     hyp.raw_words.push_back(std::move(word));
   }
-  hyp.mapped_words = resource.Mapper().RewriteWords(hyp.raw_words);
+  hyp.am_mapped_words = resource.AmMapper().RewriteWords(hyp.raw_words);
+  hyp.mapped_words = hyp.am_mapped_words;
   return hyp;
 }
 

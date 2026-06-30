@@ -139,6 +139,7 @@ StatusOr<std::unique_ptr<WenetRuntimeBridge>> WenetRuntimeBridge::Create(
   resolved_config.enable_timestamps = package.enable_timestamps;
   resolved_config.language = package.language;
   resolved_config.num_left_chunks = package.num_left_chunks;
+  resolved_config.debug = config.debug || package.debug;
   auto shared_or = LoadSharedResources(resolved_config, package);
   if (!shared_or.ok()) {
     return shared_or.status();

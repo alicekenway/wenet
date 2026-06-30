@@ -90,11 +90,14 @@ int main() {
               "A B C -> Y\n"
               "牛 乃 -> 牛 奶\n");
     auto mapper = OutputSequenceMapper::Load(longest_path, words);
-    Expect(mapper.RuleCount() == 3, "expected three mapping rules");
-    Expect(mapper.RewriteIds({1, 2, 3, 4}) == std::vector<int>({6, 4}),
-           "longest mapping failed");
-    std::vector<DecodedWord> mapped =
-        mapper.RewriteWords({Word(7, "牛", 10), Word(8, "乃", 11)});
+	    Expect(mapper.RuleCount() == 3, "expected three mapping rules");
+	    Expect(mapper.RewriteIds({1, 2, 3, 4}) == std::vector<int>({6, 4}),
+	           "longest mapping failed");
+    Expect(mapper.RewriteIds({1, 2, 4, 1, 2}) ==
+               std::vector<int>({5, 4, 5}),
+           "multiple mapping replacements failed");
+	    std::vector<DecodedWord> mapped =
+	        mapper.RewriteWords({Word(7, "牛", 10), Word(8, "乃", 11)});
     Expect(Ids(mapped) == std::vector<int>({7, 9}), "UTF-8 mapping failed");
     Expect(mapped[0].text == "牛" && mapped[1].text == "奶",
            "UTF-8 mapped text failed");
@@ -109,9 +112,23 @@ int main() {
     const fs::path unknown_path = dir / "unknown_mapping.txt";
     WriteFile(unknown_path, "A B -> missing\n");
     ExpectThrows([&]() { OutputSequenceMapper::Load(unknown_path, words); },
-                 "unknown target should fail");
+	                 "unknown target should fail");
 
-    std::cout << "output_sequence_mapper_test passed\n";
+    const fs::path final_path = dir / "final_mapping.txt";
+    WriteFile(final_path, "X D -> Y\n");
+    auto final_mapper = OutputSequenceMapper::Load(final_path, words);
+    std::vector<DecodedWord> raw = {Word(1, "A", 0), Word(2, "B", 1),
+                                    Word(4, "D", 2), Word(1, "A", 3),
+                                    Word(2, "B", 4)};
+    std::vector<DecodedWord> am_mapped = mapper.RewriteWords(raw);
+    std::vector<DecodedWord> final_mapped =
+        final_mapper.RewriteWords(am_mapped);
+    Expect(Ids(am_mapped) == std::vector<int>({5, 4, 5}),
+           "AM-stage mapping failed");
+    Expect(Ids(final_mapped) == std::vector<int>({6, 5}),
+           "final-stage mapping failed");
+
+	    std::cout << "output_sequence_mapper_test passed\n";
     return 0;
   } catch (const std::exception& e) {
     std::cerr << "output_sequence_mapper_test failed: " << e.what() << "\n";

@@ -9,6 +9,7 @@
 
 #include "flashlight/lib/text/decoder/LexiconDecoder.h"
 #include "flashlight_decoder/flashlight_result_mapper.h"
+#include "flashlight_decoder/kenlm_rescorer.h"
 
 namespace asr_sdk::internal::flashlight_decoder {
 namespace {
@@ -19,12 +20,12 @@ fl::lib::text::LexiconDecoderOptions MakeDecoderOptions(
   out.beamSize = options.beam_size;
   out.beamSizeToken = options.beam_size_token;
   out.beamThreshold = options.beam_threshold;
-  out.lmWeight = options.lm_weight;
-  out.wordScore = options.word_score;
+  out.lmWeight = 0.0;
+  out.wordScore = 0.0;
   out.unkScore = options.allow_unk
-                     ? options.unk_score
+                     ? 0.0
                      : -std::numeric_limits<float>::infinity();
-  out.silScore = options.sil_score;
+  out.silScore = 0.0;
   out.logAdd = options.log_add;
   out.criterionType = fl::lib::text::CriterionType::CTC;
   return out;
@@ -168,6 +169,7 @@ FlashlightCtcStreamDecoder::Finalize() {
     for (const auto& result : results) {
       hyps.push_back(ConvertFlashlightResult(result, *impl_->resource));
     }
+    RescoreAndApplyFinalMapping(*impl_->resource, &hyps);
     return DeduplicateMapped(std::move(hyps), impl_->resource->Options().nbest);
   } catch (const std::exception& e) {
     return ExceptionStatus("Flashlight final result failed", e);
