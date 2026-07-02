@@ -1,0 +1,8 @@
+date: 2026-06-25T13:59:21+08:00
+lmplz: wenet/SDK/0.0.3/third_party/kenlm-install/bin/lmplz
+lm_text: LM/wenet_lm/training/preprocess_data/wenetspeech_lm_char.txt
+order: 4
+prune: 0 0 1 1
+arpa: wenet/kenlm_lm/models/wenetspeech_char_4gram.arpa
+command:
+  wenet/SDK/0.0.3/third_party/kenlm-install/bin/lmplz -o 4 --prune 0 0 1 1 --text LM/wenet_lm/training/preprocess_data/wenetspeech_lm_char.txt --arpa wenet/kenlm_lm/models/wenetspeech_char_4gram.arpa

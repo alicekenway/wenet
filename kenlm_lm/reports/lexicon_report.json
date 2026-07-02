@@ -1,0 +1,10 @@
+{
+  "words": "wenet/kenlm_lm/data/words.txt",
+  "tokens": "model/sherpa-onnx-streaming-zipformer-ctc-zh-2025-06-30/tokens.txt",
+  "output": "wenet/kenlm_lm/data/lexicon.txt",
+  "word_count": 4186,
+  "direct_entries": 1426,
+  "byte_fallback_entries": 2760,
+  "rejected_count": 0,
+  "rejected_examples": []
+}

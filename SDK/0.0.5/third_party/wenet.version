@@ -1,0 +1,5 @@
+repo: https://github.com/alicekenway/wenet
+commit: 420b2093fce3dad1e6b253cb72b4c7818998964d
+runtime_mode: ONNX
+linkage: static into libasr_sdk.so
+local_path: /home/jinyang_wang/Dev/ASR/ASR_wenet/wenet

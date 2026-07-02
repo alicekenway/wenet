@@ -1,0 +1,8 @@
+{
+  "lm_text": "LM/wenet_lm/training/preprocess_data/wenetspeech_lm_char.txt",
+  "line_count": 11814373,
+  "token_count": 139458100,
+  "word_count": 4186,
+  "unk": "<unk>",
+  "output": "wenet/kenlm_lm/data/words.txt"
+}

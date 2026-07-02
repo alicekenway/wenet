@@ -1,0 +1,1 @@
+-rw-r--r-- 1 jinyang_wang jinyang_wang 569M Jun 25 14:01 wenet/kenlm_lm/models/wenetspeech_char_4gram.arpa
