@@ -164,62 +164,57 @@ def reinit_lora_modules(name, module, init_config, **kwargs):
     a_dim = max(module.lora_A.shape)
     b_dim = max(module.lora_B.shape)
     if init_config.mode == "simple":
-        match init_config.lora_A:
-            case "gaussian":
-                torch.nn.init.normal_(
-                    module.lora_A, mean=0.0,
-                    std=init_config.lora_A_std
-                )
-            case "kaiming":
-                # https://github.com/microsoft/LoRA/blob/a0a92e0f26c067cf94747bdbf1ce73793fa44d19/loralib/layers.py#L124
-                torch.nn.init.kaiming_uniform_(module.lora_A,
-                                               a=math.sqrt(5))
-            case "fan_out_kaiming":
-                torch.nn.init.kaiming_normal_(
-                    module.lora_A, mode="fan_out"
-                )
-            case "xavier":
-                torch.nn.init.xavier_normal_(module.lora_A)
-            case "zeros":
-                torch.nn.init.zeros_(module.lora_A)
-            case "unit":
-                torch.nn.init.normal_(
-                    module.lora_A, mean=0.0,
-                    std=1.0 / (a_dim**0.5)
-                )
-            case "orthogonal":
-                torch.nn.init.orthogonal_(module.lora_A)
-            case _:
-                raise ValueError(
-                    f"Unknown lora_A initialization: {init_config.lora_A}"
-                )
-        match init_config.lora_B:
-            case "gaussian":
-                torch.nn.init.normal_(
-                    module.lora_B, mean=0.0,
-                    std=init_config.lora_B_std
-                )
-            case "kaiming":
-                torch.nn.init.kaiming_normal_(module.lora_B)
-            case "fan_out_kaiming":
-                torch.nn.init.kaiming_normal_(
-                    module.lora_B, mode="fan_out"
-                )
-            case "xavier":
-                torch.nn.init.xavier_normal_(module.lora_B)
-            case "zeros":
-                torch.nn.init.zeros_(module.lora_B)
-            case "unit":
-                torch.nn.init.normal_(
-                    module.lora_B, mean=0.0,
-                    std=1.0 / (b_dim**0.5)
-                )
-            case "orthogonal":
-                torch.nn.init.orthogonal_(module.lora_B)
-            case _:
-                raise ValueError(
-                    f"Unknown lora_B initialization: {init_config.lora_B}"
-                )
+        if init_config.lora_A == "gaussian":
+            torch.nn.init.normal_(
+                module.lora_A, mean=0.0,
+                std=init_config.lora_A_std
+            )
+        elif init_config.lora_A == "kaiming":
+            # https://github.com/microsoft/LoRA/blob/a0a92e0f26c067cf94747bdbf1ce73793fa44d19/loralib/layers.py#L124
+            torch.nn.init.kaiming_uniform_(module.lora_A,
+                                           a=math.sqrt(5))
+        elif init_config.lora_A == "fan_out_kaiming":
+            torch.nn.init.kaiming_normal_(module.lora_A, mode="fan_out")
+        elif init_config.lora_A == "xavier":
+            torch.nn.init.xavier_normal_(module.lora_A)
+        elif init_config.lora_A == "zeros":
+            torch.nn.init.zeros_(module.lora_A)
+        elif init_config.lora_A == "unit":
+            torch.nn.init.normal_(
+                module.lora_A, mean=0.0,
+                std=1.0 / (a_dim**0.5)
+            )
+        elif init_config.lora_A == "orthogonal":
+            torch.nn.init.orthogonal_(module.lora_A)
+        else:
+            raise ValueError(
+                f"Unknown lora_A initialization: {init_config.lora_A}"
+            )
+
+        if init_config.lora_B == "gaussian":
+            torch.nn.init.normal_(
+                module.lora_B, mean=0.0,
+                std=init_config.lora_B_std
+            )
+        elif init_config.lora_B == "kaiming":
+            torch.nn.init.kaiming_normal_(module.lora_B)
+        elif init_config.lora_B == "fan_out_kaiming":
+            torch.nn.init.kaiming_normal_(module.lora_B, mode="fan_out")
+        elif init_config.lora_B == "xavier":
+            torch.nn.init.xavier_normal_(module.lora_B)
+        elif init_config.lora_B == "zeros":
+            torch.nn.init.zeros_(module.lora_B)
+        elif init_config.lora_B == "unit":
+            torch.nn.init.normal_(
+                module.lora_B, mean=0.0,
+                std=1.0 / (b_dim**0.5)
+            )
+        elif init_config.lora_B == "orthogonal":
+            torch.nn.init.orthogonal_(module.lora_B)
+        else:
+            raise ValueError(
+                f"Unknown lora_B initialization: {init_config.lora_B}"
+            )
         if getattr(init_config, 'scale', '') == "stable":
             gamma = init_config.stable_gamma
             m, n = module.weight.shape
