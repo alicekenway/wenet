@@ -107,8 +107,19 @@ def load_trained_modules(model: torch.nn.Module, args: None):
         partial_state_dict = OrderedDict()
         for key, value in model_state_dict.items():
             if any(key.startswith(m) for m in modules):
-                partial_state_dict[key] = value
+                if key not in main_state_dict:
+                    logging.warning("skip unexpected pretrain tensor: %s", key)
+                elif main_state_dict[key].shape != value.shape:
+                    logging.warning(
+                        "skip shape-mismatched pretrain tensor: %s, "
+                        "checkpoint shape %s, model shape %s",
+                        key, tuple(value.shape),
+                        tuple(main_state_dict[key].shape))
+                else:
+                    partial_state_dict[key] = value
         main_state_dict.update(partial_state_dict)
+        logging.info("loaded %d tensors from pre-trained modules %s",
+                     len(partial_state_dict), modules)
     else:
         logging.warning("model was not found : %s", enc_model_path)
 
