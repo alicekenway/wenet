@@ -1,0 +1,32 @@
+plugins {
+    id "com.android.application"
+}
+
+android {
+    namespace "com.example.asrdemo"
+    compileSdk 35
+
+    defaultConfig {
+        applicationId "com.example.asrdemo"
+        minSdk 26
+        targetSdk 35
+        versionCode 1
+        versionName "0.0.5-android"
+
+        externalNativeBuild {
+            cmake {
+                arguments "-DANDROID_STL=c++_shared"
+            }
+        }
+        ndk {
+            abiFilters "x86_64", "arm64-v8a"
+        }
+    }
+
+    externalNativeBuild {
+        cmake {
+            path "src/main/cpp/CMakeLists.txt"
+            version "3.22.1"
+        }
+    }
+}

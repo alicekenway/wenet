@@ -37,6 +37,25 @@ raw_wav
 tensorboard
 **/*build*
 
+# SDK 0.0.5 Android has a few unavoidable standard/upstream source paths
+# matched by the broad build ignore above.
+!SDK/0.0.5_android/android_demo/build.gradle
+!SDK/0.0.5_android/android_demo/app/build.gradle
+!SDK/0.0.5_android/third_party/kenlm/**
+SDK/0.0.5_android/android_demo/app/out/
+SDK/0.0.5_android/android_demo/app/src/main/assets/model/
+SDK/0.0.5_android/android_demo/app/src/main/assets/test.wav
+SDK/0.0.5_android/android_demo/app/src/main/jniLibs/
+SDK/0.0.5_android/android_demo/debug.keystore
+SDK/0.0.5_android/out-sdk-android-*/
+SDK/0.0.5_android/out-host/
+SDK/0.0.5_android/test_runs/
+SDK/0.0.5_android/third_party/onnxruntime/
+SDK/0.0.5_android/third_party/onnxruntime-android/
+SDK/0.0.5_android/third_party/kenlm-install/
+SDK/0.0.5_android/third_party/*.zip
+SDK/0.0.5_android/third_party/*.aar
+
 # protoc output files
 runtime/core/grpc/wenet.grpc.pb.cc
 runtime/core/grpc/wenet.grpc.pb.h

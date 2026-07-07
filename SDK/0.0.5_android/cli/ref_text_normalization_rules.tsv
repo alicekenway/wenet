@@ -1,0 +1,10 @@
+# Regex replacement rules for reference text before WER/CER calculation.
+# Format:
+#   regex<TAB>replacement
+# If replacement is omitted, the regex match is removed.
+
+\[[^\]]+\]\s*
+\\+sp\b
+\\+contact\b
+\\+pf:[^\s]+
+\\+unintelligible\b
