@@ -11,8 +11,8 @@ cd /path/to/ASR_wenet
 python3 wenet/kenlm_lm/tools/sample_eval_metadata.py
 wenet/kenlm_lm/run/1_train_lm.sh
 wenet/kenlm_lm/run/2_convert_to_bin.sh
-wenet/kenlm_lm/run/3_build_words_lm.sh
-wenet/kenlm_lm/run/4_build_lexicon_for_am.sh
+wenet/kenlm_lm/run/3_generate_words_lm.sh
+wenet/kenlm_lm/run/4_generate_lexicon_for_am.sh
 wenet/kenlm_lm/run/6_prepare_runtime.sh
 wenet/kenlm_lm/tools/run_003_acceptance_eval.sh
 ```
@@ -44,7 +44,7 @@ If output is empty or strange, first check:
 
 - `tokens.txt` IDs match the ONNX output dimension.
 - `lexicon.txt` spelling tokens all exist in AM `tokens.txt`.
-- `build_lexicon_for_am.py --tokenization` matches the AM token style:
+- `generate_lexicon_for_am.py --tokenization` matches the AM token style:
   use `byte` for byte-fallback character models and `bpe` for
   SentencePiece/BPE models with word-start tokens such as `▁THE`.
 - Add `--ignore-case` when the LM words and AM tokens use different letter
@@ -57,7 +57,7 @@ If output is empty or strange, first check:
 For English BPE/SentencePiece AM tokens, build the lexicon like this:
 
 ```bash
-python3 wenet/kenlm_lm/tools/build_lexicon_for_am.py \
+python3 wenet/kenlm_lm/tools/generate_lexicon_for_am.py \
   --words wenet/kenlm_lm/data/words.txt \
   --tokens model/sherpa-onnx-en-wenet-gigaspeech_int8/tokens.txt \
   --output wenet/kenlm_lm/data/lexicon.txt \

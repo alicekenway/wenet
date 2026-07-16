@@ -56,5 +56,5 @@ For small or prebuilt graph text fixtures, compile OpenFst text format into the
 binary graph shipped by the SDK:
 
 ```bash
-scripts/build_tlg.sh --from-text TLG.txt TLG.fst
+scripts/compile_tlg.sh --from-text TLG.txt TLG.fst
 ```

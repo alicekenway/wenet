@@ -12,7 +12,7 @@ out_dir=${4:-"${repo_root}/test/0.0.2/zipformer_smoke"}
 mkdir -p "${out_dir}"
 
 graph_dir="${out_dir}/token_loop_graph"
-"${sdk_dir}/scripts/build_sherpa_token_loop_fst.py" \
+"${sdk_dir}/scripts/generate_sherpa_token_loop_fst.py" \
   --tokens "${model_dir}/tokens.txt" \
   --out-dir "${graph_dir}"
 

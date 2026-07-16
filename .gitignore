@@ -47,6 +47,7 @@ SDK/0.0.5_android/android_demo/app/src/main/assets/model/
 SDK/0.0.5_android/android_demo/app/src/main/assets/test.wav
 SDK/0.0.5_android/android_demo/app/src/main/jniLibs/
 SDK/0.0.5_android/android_demo/debug.keystore
+SDK/0.0.5_android/dist/
 SDK/0.0.5_android/out-sdk-android-*/
 SDK/0.0.5_android/out-host/
 SDK/0.0.5_android/test_runs/

@@ -4,7 +4,7 @@
 #include <string>
 #include <vector>
 
-#include "core/result_builder.h"
+#include "core/result_conversion.h"
 #include "core/stream_session.h"
 #include "utils/status.h"
 #include "wenet_sdk/asr_engine.h"

@@ -5,7 +5,7 @@
 #include <cstdint>
 
 #include "core/engine_resources.h"
-#include "core/result_builder.h"
+#include "core/result_conversion.h"
 #include "decoder/blank_skipper.h"
 #include "decoder/decoder_interface.h"
 #include "frontend/feature_pipeline.h"

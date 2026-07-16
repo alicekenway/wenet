@@ -434,7 +434,7 @@ The runtime expects a prebuilt `TLG.fst`. It does not build the graph on device.
 For small text-format fixtures:
 
 ```bash
-scripts/build_tlg.sh --from-text TLG.txt TLG.fst
+scripts/compile_tlg.sh --from-text TLG.txt TLG.fst
 ```
 
 For production, build `T`, `L`, `G`, compose `TLG.fst`, optimize/prune offline,

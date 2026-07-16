@@ -47,7 +47,7 @@ add_library(wenet_sdk
   src/core/asr_engine.cc
   src/core/c_api.cc
   src/core/recognizer.cc
-  src/core/result_builder.cc
+  src/core/result_conversion.cc
   src/core/stream_session.cc
   src/decoder/blank_skipper.cc
   src/decoder/ctc_prefix_decoder.cc

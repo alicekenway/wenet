@@ -222,8 +222,8 @@ wenet-lite-sdk/
       stream_session.cc
       recognizer.h
       recognizer.cc
-      result_builder.h
-      result_builder.cc
+      result_conversion.h
+      result_conversion.cc
 
     frontend/
       feature_pipeline.h
@@ -317,7 +317,7 @@ wenet-lite-sdk/
   scripts/
     export_wenet_to_onnx.py
     prepare_lm.sh
-    build_tlg.sh
+    compile_tlg.sh
     quantize_onnx.py
     package_model.py
     validate_package.py
@@ -379,7 +379,7 @@ wenet-lite-sdk/
 | `src/core/asr_engine.cc` | Loads metadata, config, symbols, FST graph, and model sessions. Owns shared resources. |
 | `src/core/stream_session.*` | Implements one streaming recognition session. Owns per-stream mutable state. |
 | `src/core/recognizer.*` | Orchestrates feature extraction, model forward, decoder advance, and result generation. |
-| `src/core/result_builder.*` | Converts decoder paths into SDK result objects. Handles partial/final formatting. |
+| `src/core/result_conversion.*` | Converts decoder paths into SDK result objects. Handles partial/final formatting. |
 
 ### 6.3 Frontend
 
@@ -1003,7 +1003,7 @@ arpa2fst --read-symbol-table=words.txt \
          "${OUT}/G.fst"
 
 # Build T, L, and compose TLG.
-./build_tlg.sh tokens.txt lexicon.txt "${OUT}/G.fst" "${OUT}/TLG.fst"
+./compile_tlg.sh tokens.txt lexicon.txt "${OUT}/G.fst" "${OUT}/TLG.fst"
 ```
 
 Only ship these to the device:
@@ -1245,7 +1245,7 @@ add_library(wenet_sdk
   src/core/asr_engine.cc
   src/core/stream_session.cc
   src/core/recognizer.cc
-  src/core/result_builder.cc
+  src/core/result_conversion.cc
 
   src/frontend/feature_pipeline.cc
   src/frontend/fbank.cc
@@ -1605,7 +1605,7 @@ Deliverables:
 ```text
 src/decoder/blank_skipper.*
 src/postprocess/endpoint.*
-src/core/result_builder.*
+src/core/result_conversion.*
 ```
 
 Tasks:

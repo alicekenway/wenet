@@ -81,9 +81,9 @@ Typical flow:
 cd /home/jinyang_wang/Dev/ASR/ASR_wenet
 python3 LM/kenlm_lm/tools/sample_eval_metadata.py
 LM/kenlm_lm/tools/train_kenlm_arpa.sh
-LM/kenlm_lm/tools/build_kenlm_binary.sh
-python3 LM/kenlm_lm/tools/build_words_from_lm.py
-python3 LM/kenlm_lm/tools/build_lexicon_for_am.py
+LM/kenlm_lm/tools/convert_kenlm_binary.sh
+python3 LM/kenlm_lm/tools/generate_words_from_lm.py
+python3 LM/kenlm_lm/tools/generate_lexicon_for_am.py
 wenet/SDK/0.0.3/scripts/prepare_flashlight_runtime_package.sh
 ```
 

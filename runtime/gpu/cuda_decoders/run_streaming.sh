@@ -97,7 +97,7 @@ fi
 if [ ${stage} -le 1 ] && [ ${stop_stage} -ge 1 ]; then
      echo "build tlg"
      # take aishell1 as example, you may build it using your own lm.
-     # bash build_tlg.sh
+     # bash compile_tlg.sh
      # tlg_dir=./data/lang_test
      # or you can download our pre-built TLG for this aishell1 tutorial.
      apt-get install git-lfs

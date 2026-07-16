@@ -832,9 +832,9 @@ SDK/scripts/prepare_flashlight_runtime_package.sh
 LM/kenlm_lm/README.md
 LM/kenlm_lm/tools/sample_eval_metadata.py
 LM/kenlm_lm/tools/train_kenlm_arpa.sh
-LM/kenlm_lm/tools/build_kenlm_binary.sh
-LM/kenlm_lm/tools/build_words_from_lm.py
-LM/kenlm_lm/tools/build_lexicon_for_am.py
+LM/kenlm_lm/tools/convert_kenlm_binary.sh
+LM/kenlm_lm/tools/generate_words_from_lm.py
+LM/kenlm_lm/tools/generate_lexicon_for_am.py
 LM/kenlm_lm/tools/run_003_acceptance_eval.sh
 
 SDK/test/flashlight_decoder_test.cc
@@ -1247,9 +1247,9 @@ LM/kenlm_lm/
 └── tools/
     ├── sample_eval_metadata.py
     ├── train_kenlm_arpa.sh
-    ├── build_kenlm_binary.sh
-    ├── build_words_from_lm.py
-    ├── build_lexicon_for_am.py
+    ├── convert_kenlm_binary.sh
+    ├── generate_words_from_lm.py
+    ├── generate_lexicon_for_am.py
     └── run_003_acceptance_eval.sh
 ```
 
@@ -1265,13 +1265,13 @@ Tool responsibilities:
      /home/jinyang_wang/Dev/ASR/ASR_wenet/LM/wenet_lm/training/preprocess_data/wenetspeech_lm_char.txt
      ```
    - Record the KenLM order and command line in `LM/kenlm_lm/reports`.
-3. `build_kenlm_binary.sh`
+3. `convert_kenlm_binary.sh`
    - Convert the ARPA model to `lm.bin`.
    - Verify the binary can be opened by KenLM tooling.
-4. `build_words_from_lm.py`
+4. `generate_words_from_lm.py`
    - Build `words.txt` from the LM vocabulary.
    - Add `<unk>` and any required special entries deterministically.
-5. `build_lexicon_for_am.py`
+5. `generate_lexicon_for_am.py`
    - Build `lexicon.txt` against the test AM token table.
    - Reject or report words that cannot be represented with the AM tokens.
 6. `run_003_acceptance_eval.sh`

@@ -4,18 +4,37 @@ set -euo pipefail
 ABI="${1:-x86_64}"
 MINSDK="${MINSDK:-26}"
 TARGETSDK="${TARGETSDK:-35}"
+VERSION="${VERSION:-0.0.5}"
 
 : "${ANDROID_HOME:?ANDROID_HOME is required}"
-: "${ANDROID_NDK:?ANDROID_NDK is required}"
 
 SDK_ROOT="${SDK_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}"
+REPO_ROOT="${REPO_ROOT:-$(cd "${SDK_ROOT}/../../.." && pwd)}"
 ANDROID_DEMO_ROOT="${ANDROID_DEMO_ROOT:-${SDK_ROOT}/android_demo}"
 APP_ROOT="${ANDROID_DEMO_ROOT}/app"
 OUTPUT_ROOT="${OUTPUT_ROOT:-${APP_ROOT}/out}"
 WORK_DIR="${OUTPUT_ROOT}/manual-${ABI}"
+AAR_PATH="${AAR_PATH:-${SDK_ROOT}/dist/asr-sdk-android-${VERSION}.aar}"
+MODEL_ZIP="${MODEL_ZIP:-${SDK_ROOT}/dist/asr-model-${VERSION}.zip}"
+TEST_WAV="${TEST_WAV:-${REPO_ROOT}/data/ENX/test_ONEASR-2061.utf8.part/wav/000000003.wav}"
 
 if [ -n "${JAVA_HOME:-}" ]; then
   export PATH="${JAVA_HOME}/bin:${PATH}"
+fi
+
+if [ ! -f "${AAR_PATH}" ]; then
+  echo "Missing AAR: ${AAR_PATH}" >&2
+  echo "Run scripts/make_android_aar.sh first." >&2
+  exit 1
+fi
+if [ ! -f "${MODEL_ZIP}" ]; then
+  echo "Missing model zip: ${MODEL_ZIP}" >&2
+  echo "Run scripts/make_android_model_zip.sh first." >&2
+  exit 1
+fi
+if [ ! -f "${TEST_WAV}" ]; then
+  echo "Missing test WAV: ${TEST_WAV}" >&2
+  exit 1
 fi
 
 ANDROID_JAR="${ANDROID_HOME}/platforms/android-${TARGETSDK}/android.jar"
@@ -33,50 +52,17 @@ ZIPALIGN="${BUILD_TOOLS_DIR}/zipalign"
 APKSIGNER="${BUILD_TOOLS_DIR}/apksigner"
 
 rm -rf "${WORK_DIR}"
-mkdir -p "${WORK_DIR}"/{native,gen,classes,dex,apk/lib/${ABI}}
+mkdir -p "${WORK_DIR}"/{aar,assets,gen,classes,dex,apk/lib/${ABI}}
 
-cmake -S "${APP_ROOT}/src/main/cpp" -B "${WORK_DIR}/native" \
-  -DCMAKE_TOOLCHAIN_FILE="${ANDROID_NDK}/build/cmake/android.toolchain.cmake" \
-  -DANDROID_ABI="${ABI}" \
-  -DANDROID_PLATFORM="android-${MINSDK}" \
-  -DANDROID_STL=c++_shared \
-  -DCMAKE_BUILD_TYPE=Release
-cmake --build "${WORK_DIR}/native" -j"$(nproc)"
+unzip -q "${AAR_PATH}" -d "${WORK_DIR}/aar"
+test -f "${WORK_DIR}/aar/classes.jar"
+test -f "${WORK_DIR}/aar/jni/${ABI}/libasr_sdk.so"
+test -f "${WORK_DIR}/aar/jni/${ABI}/libasr_jni.so"
+test -f "${WORK_DIR}/aar/jni/${ABI}/libonnxruntime.so"
 
-cp "${WORK_DIR}/native/libasr_jni.so" "${WORK_DIR}/apk/lib/${ABI}/"
-cp "${APP_ROOT}/src/main/jniLibs/${ABI}/libasr_sdk.so" "${WORK_DIR}/apk/lib/${ABI}/"
-cp "${APP_ROOT}/src/main/jniLibs/${ABI}/libonnxruntime.so" "${WORK_DIR}/apk/lib/${ABI}/"
-case "${ABI}" in
-  x86_64)
-    NDK_TRIPLE="x86_64-linux-android"
-    ;;
-  arm64-v8a)
-    NDK_TRIPLE="aarch64-linux-android"
-    ;;
-  x86)
-    NDK_TRIPLE="i686-linux-android"
-    ;;
-  armeabi-v7a)
-    NDK_TRIPLE="arm-linux-androideabi"
-    ;;
-  *)
-    echo "Unsupported ABI for libc++ lookup: ${ABI}" >&2
-    exit 1
-    ;;
-esac
-CXX_SHARED="${ANDROID_NDK}/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/${NDK_TRIPLE}/${MINSDK}/libc++_shared.so"
-if [ ! -f "${CXX_SHARED}" ]; then
-  CXX_SHARED="${ANDROID_NDK}/toolchains/llvm/prebuilt/linux-x86_64/sysroot/usr/lib/${NDK_TRIPLE}/libc++_shared.so"
-fi
-if [ ! -f "${CXX_SHARED}" ]; then
-  CXX_SHARED="$(find -L "${ANDROID_NDK}" -path "*/${NDK_TRIPLE}*/libc++_shared.so" | sort -V | tail -n 1)"
-fi
-if [ -n "${CXX_SHARED}" ] && [ -f "${CXX_SHARED}" ]; then
-  cp "${CXX_SHARED}" "${WORK_DIR}/apk/lib/${ABI}/"
-else
-  echo "Cannot find libc++_shared.so for ${ABI}" >&2
-  exit 1
-fi
+cp "${MODEL_ZIP}" "${WORK_DIR}/assets/asr-model.zip"
+cp "${TEST_WAV}" "${WORK_DIR}/assets/test.wav"
+cp "${WORK_DIR}/aar/jni/${ABI}/"*.so "${WORK_DIR}/apk/lib/${ABI}/"
 
 "${AAPT2}" link \
   -I "${ANDROID_JAR}" \
@@ -84,16 +70,18 @@ fi
   --java "${WORK_DIR}/gen" \
   --min-sdk-version "${MINSDK}" \
   --target-sdk-version "${TARGETSDK}" \
-  -A "${APP_ROOT}/src/main/assets" \
+  -A "${WORK_DIR}/assets" \
   -o "${WORK_DIR}/base.apk"
 
 javac -encoding UTF-8 \
   -source 1.8 -target 1.8 \
   -bootclasspath "${ANDROID_JAR}" \
+  -classpath "${WORK_DIR}/aar/classes.jar" \
   -d "${WORK_DIR}/classes" \
   $(find "${WORK_DIR}/gen" "${APP_ROOT}/src/main/java" -name '*.java' | sort)
 
 "${D8}" --min-api "${MINSDK}" --output "${WORK_DIR}/dex" \
+  "${WORK_DIR}/aar/classes.jar" \
   $(find "${WORK_DIR}/classes" -name '*.class' | sort)
 
 cp "${WORK_DIR}/base.apk" "${WORK_DIR}/unsigned.apk"

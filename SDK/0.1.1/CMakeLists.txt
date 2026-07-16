@@ -181,7 +181,7 @@ if(ASR_SDK_BUILD_TOOLS)
   target_link_libraries(inspect_package PRIVATE asr_sdk asr_sdk::ctc_core)
   set_target_properties(inspect_package PROPERTIES BUILD_RPATH "$ORIGIN" INSTALL_RPATH "$ORIGIN/../lib")
 
-  add_executable(print_build_info cli/print_build_info.cc)
+  add_executable(print_build_info cli/print_sdk_info.cc)
   target_link_libraries(print_build_info PRIVATE asr_sdk)
   set_target_properties(print_build_info PROPERTIES BUILD_RPATH "$ORIGIN" INSTALL_RPATH "$ORIGIN/../lib")
 

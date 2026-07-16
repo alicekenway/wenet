@@ -296,7 +296,7 @@ wenet-static-ort-dynamic-sdk/
     benchmark.cc
     inspect_package.cc
     compare_with_wenet.cc
-    print_build_info.cc
+    print_sdk_info.cc
 
   examples/
     cpp/
@@ -1576,7 +1576,7 @@ Deliverables:
 include/asr_sdk/*.h
 src/sdk/*.cc
 src/package/model_package.*
-tools/print_build_info.cc
+tools/print_sdk_info.cc
 ```
 
 Tasks:
