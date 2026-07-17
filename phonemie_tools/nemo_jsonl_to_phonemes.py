@@ -3,10 +3,12 @@
 
 All fields other than the transcript field are preserved.  The converter uses
 phonemizer's espeak backend and writes one independent phoneme per
-space-separated CTC token.  Words are separated by the standalone ``▁`` token.
+space-separated CTC token.  By default, words are separated by the standalone
+``▁`` token.  Pass ``--word-token none`` to omit word-boundary tokens.
 
 Example:
-    python nemo_jsonl_to_phonemes.py input.jsonl output.jsonl --workers 8
+    python nemo_jsonl_to_phonemes.py input.jsonl output.jsonl \
+        --language en-us --word-token ▁ --workers 8
 """
 
 from __future__ import annotations
@@ -18,18 +20,26 @@ import os
 import sys
 from collections import deque
 from pathlib import Path
-from typing import Any, Deque, Iterable, Iterator, List, Sequence, Tuple
+from typing import Any, Deque, Iterable, Iterator, List, Optional, Sequence, Tuple
 
 
 DEFAULT_ESPEAK_LIBRARY = "/home/jinyang_wang/.local/lib/libespeak-ng.so"
 DEFAULT_LANGUAGE = "en-us"
 DEFAULT_WORD_TOKEN = "▁"
+# phonemizer does not allow its phone and word separators to both be a space.
+# Use an internal private-use marker, then replace it after phonemization when
+# the caller does not want an explicit word-boundary token.
+DISABLED_WORD_TOKEN_MARKER = "\ue000"
 
 _worker_language = DEFAULT_LANGUAGE
-_worker_word_token = DEFAULT_WORD_TOKEN
+_worker_word_token: Optional[str] = DEFAULT_WORD_TOKEN
 
 
-def initialize_worker(espeak_library: str, language: str, word_token: str) -> None:
+def initialize_worker(
+    espeak_library: str,
+    language: str,
+    word_token: Optional[str],
+) -> None:
     """Configure phonemizer independently inside each worker process."""
     global _worker_language, _worker_word_token
 
@@ -52,13 +62,18 @@ def phonemize_batch(texts: Sequence[str]) -> List[str]:
         return [""] * len(texts)
 
     nonempty_texts = [texts[index] for index in nonempty_positions]
+    word_separator = (
+        DISABLED_WORD_TOKEN_MARKER
+        if _worker_word_token is None
+        else f" {_worker_word_token} "
+    )
     phonemes = phonemize(
         nonempty_texts,
         language=_worker_language,
         backend="espeak",
         separator=Separator(
             phone=" ",
-            word=f" {_worker_word_token} ",
+            word=word_separator,
         ),
         strip=True,
         with_stress=False,
@@ -67,6 +82,11 @@ def phonemize_batch(texts: Sequence[str]) -> List[str]:
 
     if isinstance(phonemes, str):
         phonemes = [phonemes]
+    if _worker_word_token is None:
+        phonemes = [
+            phones.replace(DISABLED_WORD_TOKEN_MARKER, " ")
+            for phones in phonemes
+        ]
     if len(phonemes) != len(nonempty_texts):
         raise RuntimeError(
             "phonemizer returned a different number of transcripts "
@@ -161,7 +181,7 @@ def convert_manifest(
     output_path: Path,
     espeak_library: str,
     language: str,
-    word_token: str,
+    word_token: Optional[str],
     text_key: str,
     workers: int,
     batch_size: int,
@@ -181,8 +201,14 @@ def convert_manifest(
         raise ValueError("--pending-batches must be at least 1")
     if progress_every < 0:
         raise ValueError("--progress-every must be at least 0")
-    if not word_token or any(character.isspace() for character in word_token):
-        raise ValueError("--word-token must be a non-empty token without whitespace")
+    if not language.strip():
+        raise ValueError("--language must not be empty")
+    if word_token is not None and (
+        not word_token or any(character.isspace() for character in word_token)
+    ):
+        raise ValueError(
+            "--word-token must be 'none' or a non-empty token without whitespace"
+        )
 
     # Import in the parent first so a missing dependency produces a clear error
     # before the process pool is created.
@@ -249,6 +275,11 @@ def convert_manifest(
     return records_written
 
 
+def parse_word_token(value: str) -> Optional[str]:
+    """Convert the CLI spelling 'none' to a disabled word separator."""
+    return None if value.casefold() == "none" else value
+
+
 def parse_args(argv: Iterable[str] | None = None) -> argparse.Namespace:
     default_workers = min(8, os.cpu_count() or 1)
     parser = argparse.ArgumentParser(description=__doc__)
@@ -260,14 +291,19 @@ def parse_args(argv: Iterable[str] | None = None) -> argparse.Namespace:
         help=f"path to libespeak-ng.so (default: {DEFAULT_ESPEAK_LIBRARY})",
     )
     parser.add_argument(
+        "-l",
         "--language",
         default=DEFAULT_LANGUAGE,
         help=f"espeak language code (default: {DEFAULT_LANGUAGE})",
     )
     parser.add_argument(
         "--word-token",
+        type=parse_word_token,
         default=DEFAULT_WORD_TOKEN,
-        help=f"standalone word-boundary token (default: {DEFAULT_WORD_TOKEN})",
+        help=(
+            "standalone word-boundary token, or 'none' to disable it "
+            f"(default: {DEFAULT_WORD_TOKEN})"
+        ),
     )
     parser.add_argument(
         "--text-key",
