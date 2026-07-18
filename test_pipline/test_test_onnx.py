@@ -28,6 +28,19 @@ class TestScoring(unittest.TestCase):
     def test_cjk_character_tokens_keep_latin_word(self):
         self.assertEqual(MODULE.char_tokens("你 好 ASR!"), ["你", "好", "ASR"])
 
+    def test_ctc_greedy_collapse_across_blanks(self):
+        self.assertEqual(
+            MODULE.ctc_greedy_ids([0, 3, 3, 0, 3, 4, 4, 0], blank_id=0),
+            [3, 3, 4],
+        )
+
+    def test_int8_model_contract_name(self):
+        model = Path("/tmp/stage1-wuw.int8.onnx")
+        self.assertEqual(
+            MODULE.default_contract_path(model),
+            Path("/tmp/stage1-wuw.contract.json"),
+        )
+
 
 class TestEndToEnd(unittest.TestCase):
     def test_fake_sdk_decoder_outputs_requested_files(self):
