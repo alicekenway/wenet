@@ -8,6 +8,7 @@ import subprocess
 import sys
 import tempfile
 import unittest
+from unittest import mock
 import wave
 
 
@@ -40,6 +41,47 @@ class TestScoring(unittest.TestCase):
             MODULE.default_contract_path(model),
             Path("/tmp/stage1-wuw.contract.json"),
         )
+
+    def test_available_cpu_count_prefers_slurm_allocation(self):
+        with mock.patch.dict(
+            MODULE.os.environ,
+            {"SLURM_CPUS_PER_TASK": "3"},
+            clear=False,
+        ):
+            self.assertEqual(MODULE.available_cpu_count(), 3)
+
+    def test_incremental_result_is_visible_before_streams_close(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            results_path = root / "results.jsonl"
+            hypothesis_path = root / "hyp.txt"
+            log_path = root / "decoder.log"
+            with (
+                results_path.open("w", encoding="utf-8") as results_stream,
+                hypothesis_path.open("w", encoding="utf-8") as hypothesis_stream,
+                log_path.open("w", encoding="utf-8") as log_stream,
+            ):
+                MODULE.write_incremental_result(
+                    results_stream,
+                    hypothesis_stream,
+                    log_stream,
+                    key="utt1",
+                    wav=Path("/audio/utt1.wav"),
+                    reference="hello",
+                    hypothesis="hallo",
+                    detail="utt1 audio_sec=1.0",
+                )
+                row = json.loads(results_path.read_text(encoding="utf-8"))
+                self.assertEqual(row["key"], "utt1")
+                self.assertEqual(row["hyp"], "hallo")
+                self.assertEqual(
+                    hypothesis_path.read_text(encoding="utf-8"),
+                    "utt1 hallo\n",
+                )
+                self.assertEqual(
+                    log_path.read_text(encoding="utf-8"),
+                    "utt1 audio_sec=1.0\n",
+                )
 
 
 class TestEndToEnd(unittest.TestCase):

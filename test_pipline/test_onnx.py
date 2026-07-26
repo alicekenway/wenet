@@ -12,6 +12,7 @@ import re
 import subprocess
 import sys
 import time
+from typing import Callable, TextIO
 import unicodedata
 import wave
 
@@ -80,6 +81,13 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--device", choices=("auto", "cpu", "gpu"), default="auto",
         help="ONNX Runtime provider for --onnx-model (default: auto)",
+    )
+    parser.add_argument(
+        "--ort-intra-op-threads", type=int, default=0,
+        help=(
+            "ONNX Runtime CPU threads for --onnx-model; 0 uses the Slurm "
+            "CPU allocation (default: 0)"
+        ),
     )
     parser.add_argument(
         "--waveform-scale", type=float, default=32768.0,
@@ -486,8 +494,54 @@ def _ort_numpy_dtype(tensor_type: str, np_module):
     return mapping[tensor_type]
 
 
+def available_cpu_count() -> int:
+    """Return the CPUs available to this process, respecting Slurm first."""
+
+    for name in ("SLURM_CPUS_PER_TASK", "SLURM_CPUS_ON_NODE"):
+        raw = os.environ.get(name)
+        if raw:
+            try:
+                value = int(raw)
+            except ValueError:
+                continue
+            if value > 0:
+                return value
+    try:
+        return max(1, len(os.sched_getaffinity(0)))
+    except (AttributeError, OSError):
+        return max(1, os.cpu_count() or 1)
+
+
+def write_incremental_result(
+    results_stream: TextIO,
+    hypothesis_stream: TextIO,
+    log_stream: TextIO,
+    *,
+    key: str,
+    wav: Path,
+    reference: str,
+    hypothesis: str,
+    detail: str,
+) -> None:
+    """Write and flush one completed utterance to every live output."""
+
+    row = {
+        "key": key,
+        "wav": str(wav),
+        "ref": reference,
+        "hyp": hypothesis,
+    }
+    results_stream.write(json.dumps(row, ensure_ascii=False) + "\n")
+    hypothesis_stream.write(f"{key} {hypothesis}\n")
+    log_stream.write(detail + "\n")
+    results_stream.flush()
+    hypothesis_stream.flush()
+    log_stream.flush()
+
+
 def run_single_onnx(model_path: Path, contract: dict, tokens: dict[int, str],
-                    keys: list[str], wavs: dict[str, Path], args: argparse.Namespace
+                    keys: list[str], wavs: dict[str, Path], args: argparse.Namespace,
+                    progress_callback: Callable[[str, str, str], None] | None = None,
                     ) -> tuple[dict[str, str], float, float, str]:
     try:
         import numpy as np
@@ -512,8 +566,18 @@ def run_single_onnx(model_path: Path, contract: dict, tokens: dict[int, str],
     else:
         providers = ["CPUExecutionProvider"]
 
+    if args.ort_intra_op_threads < 0:
+        raise PipelineError("--ort-intra-op-threads must be >= 0")
+    ort_threads = args.ort_intra_op_threads or available_cpu_count()
+    session_options = ort.SessionOptions()
+    session_options.intra_op_num_threads = ort_threads
+    session_options.inter_op_num_threads = 1
     try:
-        session = ort.InferenceSession(str(model_path), providers=providers)
+        session = ort.InferenceSession(
+            str(model_path),
+            sess_options=session_options,
+            providers=providers,
+        )
     except Exception as exc:
         raise PipelineError(f"failed to load ONNX model {model_path}: {exc}") from exc
     inputs = {item.name: item for item in session.get_inputs()}
@@ -557,6 +621,8 @@ def run_single_onnx(model_path: Path, contract: dict, tokens: dict[int, str],
     log_lines = [
         f"model {model_path}",
         f"providers {session.get_providers()}",
+        f"ort_intra_op_threads {ort_threads}",
+        "ort_inter_op_threads 1",
         f"inputs {[(item.name, item.type, item.shape) for item in session.get_inputs()]}",
         f"outputs {[(item.name, item.type, item.shape) for item in session.get_outputs()]}",
     ]
@@ -634,8 +700,12 @@ def run_single_onnx(model_path: Path, contract: dict, tokens: dict[int, str],
                     mask = np.ones(
                         (1, 1, cache_frames + encoder_frames), dtype=np.bool_
                     )
-                    if chunks_run == 0:
-                        mask[:, :, :cache_frames] = False
+                    valid_cache_frames = min(
+                        cache_frames,
+                        chunks_run * encoder_frames,
+                    )
+                    invalid_cache_frames = cache_frames - valid_cache_frames
+                    mask[:, :, :invalid_cache_frames] = False
                     feed[name] = mask.astype(
                         _ort_numpy_dtype(inputs[name].type, np), copy=False
                     )
@@ -669,12 +739,16 @@ def run_single_onnx(model_path: Path, contract: dict, tokens: dict[int, str],
                 raise PipelineError(
                     f"token table has no entries for predicted IDs {missing_tokens}"
                 )
-            hypotheses[key] = args.token_separator.join(tokens[item] for item in token_ids)
-            log_lines.append(
+            hypothesis = args.token_separator.join(tokens[item] for item in token_ids)
+            hypotheses[key] = hypothesis
+            detail = (
                 f"{key} audio_sec={waveform.shape[1] / sample_rate:.3f} "
                 f"fbank_frames={features.shape[0]} chunks={chunks_run} "
                 f"ctc_frames={sum(value.shape[0] for value in all_ctc)}"
             )
+            log_lines.append(detail)
+            if progress_callback is not None:
+                progress_callback(key, hypothesis, detail)
         except PipelineError:
             raise
         except Exception as exc:
@@ -877,13 +951,38 @@ def main() -> int:
                     "contains token IDs but not their text symbols"
                 )
             tokens = read_token_table(args.tokens)
-            hyps, audio_sec, decode_sec, log_text = run_single_onnx(
-                model_path, contract, tokens, keys, wavs, args
-            )
+            results_path = output_dir / "results.jsonl"
+            with (
+                results_path.open("w", encoding="utf-8") as results_stream,
+                hyp_path.open("w", encoding="utf-8") as hypothesis_stream,
+                log_path.open("w", encoding="utf-8") as live_log_stream,
+            ):
+                def record_completed(
+                    key: str,
+                    hypothesis: str,
+                    detail: str,
+                ) -> None:
+                    write_incremental_result(
+                        results_stream,
+                        hypothesis_stream,
+                        live_log_stream,
+                        key=key,
+                        wav=wavs[key],
+                        reference=refs[key],
+                        hypothesis=hypothesis,
+                        detail=detail,
+                    )
+
+                hyps, audio_sec, decode_sec, log_text = run_single_onnx(
+                    model_path,
+                    contract,
+                    tokens,
+                    keys,
+                    wavs,
+                    args,
+                    progress_callback=record_completed,
+                )
             log_path.write_text(log_text, encoding="utf-8")
-            with hyp_path.open("w", encoding="utf-8") as stream:
-                for key in keys:
-                    stream.write(f"{key} {hyps[key]}\n")
             rtf = decode_sec / audio_sec if audio_sec > 0 else math.nan
             rtf_source = "wall_clock"
         else:
