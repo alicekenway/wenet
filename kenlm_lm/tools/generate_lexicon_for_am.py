@@ -131,6 +131,152 @@ def tokenize_bpe_longest_match(
     return pieces, "", used_case_insensitive
 
 
+def tokenize_bpe_shortest(
+    word: str,
+    token_set,
+    token_to_id,
+    max_token_len: int,
+    word_boundary: str,
+    folded_token_index=None,
+):
+    """Return the globally shortest valid token spelling for a word."""
+    text = word_boundary + word
+    best = [None] * (len(text) + 1)
+    best[0] = ([], False)
+    for pos in range(len(text)):
+        if best[pos] is None:
+            continue
+        prefix, prefix_used_folded = best[pos]
+        end = min(len(text), pos + max_token_len)
+        for next_pos in range(pos + 1, end + 1):
+            surface = text[pos:next_pos]
+            matched, used_folded = resolve_token(
+                surface, token_set, folded_token_index
+            )
+            if matched is None:
+                continue
+            candidate = prefix + [matched]
+            candidate_used_folded = prefix_used_folded or used_folded
+            current = best[next_pos]
+            candidate_key = (
+                len(candidate),
+                tuple(token_to_id[token] for token in candidate),
+            )
+            current_key = (
+                (
+                    len(current[0]),
+                    tuple(token_to_id[token] for token in current[0]),
+                )
+                if current is not None
+                else None
+            )
+            if current_key is None or candidate_key < current_key:
+                best[next_pos] = (candidate, candidate_used_folded)
+    if best[-1] is None:
+        return None, text, False
+    return best[-1][0], "", best[-1][1]
+
+
+def tokenize_bpe_characters(
+    word: str,
+    token_set,
+    word_boundary: str,
+    allow_standalone_boundary: bool,
+    folded_token_index=None,
+):
+    """Return a character spelling without requiring ▁ as a lexicon token."""
+    if not word:
+        return None, word_boundary, False
+    pieces = []
+    used_case_insensitive = False
+
+    first_surface = word_boundary + word[0]
+    first, used_folded = resolve_token(
+        first_surface, token_set, folded_token_index
+    )
+    if first is not None:
+        pieces.append(first)
+        used_case_insensitive = used_case_insensitive or used_folded
+    elif allow_standalone_boundary:
+        boundary, boundary_folded = resolve_token(
+            word_boundary, token_set, folded_token_index
+        )
+        character, character_folded = resolve_token(
+            word[0], token_set, folded_token_index
+        )
+        if boundary is None or character is None:
+            return None, first_surface, used_case_insensitive
+        pieces.extend([boundary, character])
+        used_case_insensitive = (
+            used_case_insensitive or boundary_folded or character_folded
+        )
+    else:
+        return None, first_surface, used_case_insensitive
+
+    for character_surface in word[1:]:
+        character, used_folded = resolve_token(
+            character_surface, token_set, folded_token_index
+        )
+        if character is None:
+            return None, character_surface, used_case_insensitive
+        pieces.append(character)
+        used_case_insensitive = used_case_insensitive or used_folded
+    return pieces, "", used_case_insensitive
+
+
+def load_sentencepiece_model(path: Path):
+    try:
+        import sentencepiece as spm
+    except ImportError as exc:
+        raise SystemExit(
+            "--sentencepiece-model requires the Python sentencepiece package"
+        ) from exc
+    processor = spm.SentencePieceProcessor()
+    if not processor.load(str(path)):
+        raise SystemExit(f"failed to load SentencePiece model: {path}")
+    return processor
+
+
+def validate_sentencepiece_compatibility(processor, token_set, path: Path):
+    ignored = {"<s>", "</s>"}
+    pieces = {
+        processor.id_to_piece(index)
+        for index in range(processor.get_piece_size())
+        if processor.id_to_piece(index) not in ignored
+    }
+    missing = sorted(pieces - token_set)
+    coverage = 1.0 if not pieces else (len(pieces) - len(missing)) / len(pieces)
+    if coverage < 0.99:
+        raise SystemExit(
+            f"{path}: SentencePiece/token coverage is only {coverage:.2%}; "
+            "the tokenizer model does not match tokens.txt"
+        )
+    return {
+        "piece_count": len(pieces),
+        "covered_piece_count": len(pieces) - len(missing),
+        "coverage": coverage,
+        "missing_pieces": missing,
+    }
+
+
+def canonical_sentencepiece_spelling(
+    processor,
+    word: str,
+    token_set,
+    word_boundary: str,
+    allow_standalone_boundary: bool,
+):
+    pieces = list(processor.encode(word, out_type=str))
+    if not pieces:
+        return None, ["<empty>"]
+    missing = [piece for piece in pieces if piece not in token_set]
+    if not allow_standalone_boundary and word_boundary in pieces:
+        missing.append(word_boundary)
+    if missing:
+        return None, sorted(set(missing))
+    return pieces, []
+
+
 def build_byte_lexicon(words, token_to_id, model_vocab_size, fout, ignore_case: bool):
     token_set = valid_model_tokens(token_to_id, model_vocab_size)
     folded_token_index = (
@@ -172,11 +318,14 @@ def build_bpe_lexicon(
     word_boundary: str,
     allow_standalone_boundary: bool,
     ignore_case: bool,
+    sentencepiece_model=None,
+    max_spellings: int = 1,
+    add_character_fallback: bool = False,
 ):
-    token_set = valid_model_tokens(token_to_id, model_vocab_size)
+    model_token_set = valid_model_tokens(token_to_id, model_vocab_size)
     token_set = {
         token
-        for token in token_set
+        for token in model_token_set
         if not is_special_token(token) and not is_byte_token(token)
     }
     if not allow_standalone_boundary:
@@ -193,33 +342,126 @@ def build_bpe_lexicon(
         build_case_insensitive_index(token_set, token_to_id) if ignore_case else None
     )
 
+    processor = (
+        load_sentencepiece_model(Path(sentencepiece_model))
+        if sentencepiece_model
+        else None
+    )
+    sentencepiece_compatibility = (
+        validate_sentencepiece_compatibility(
+            processor, model_token_set, Path(sentencepiece_model)
+        )
+        if processor is not None
+        else None
+    )
+
     one_piece = 0
     bpe = 0
     case_insensitive = 0
+    canonical_entries = 0
+    shortest_entries = 0
+    character_fallback_entries = 0
+    multi_spelling_words = 0
+    entry_count = 0
+    spelling_count_histogram = {}
+    canonical_unavailable_count = 0
+    canonical_unavailable = []
     rejected = []
     for word in words:
         if word == "<unk>" and word in token_to_id:
             fout.write(f"{word} {word}\n")
             one_piece += 1
+            entry_count += 1
+            spelling_count_histogram[1] = spelling_count_histogram.get(1, 0) + 1
             continue
-        pieces, unmatched, used_folded = tokenize_bpe_longest_match(
-            word, token_set, max_token_len, word_boundary, folded_token_index
+
+        spellings = []
+        spelling_keys = set()
+
+        def add_spelling(pieces, source, used_folded=False):
+            nonlocal one_piece, bpe, case_insensitive
+            nonlocal canonical_entries, shortest_entries
+            nonlocal character_fallback_entries
+            if pieces is None or len(spellings) >= max_spellings:
+                return
+            key = tuple(pieces)
+            if key in spelling_keys:
+                return
+            spelling_keys.add(key)
+            spellings.append(pieces)
+            if len(pieces) == 1:
+                one_piece += 1
+            else:
+                bpe += 1
+            if used_folded:
+                case_insensitive += 1
+            if source == "canonical":
+                canonical_entries += 1
+            elif source == "shortest":
+                shortest_entries += 1
+            elif source == "character":
+                character_fallback_entries += 1
+
+        if processor is not None:
+            canonical, missing = canonical_sentencepiece_spelling(
+                processor,
+                word,
+                token_set,
+                word_boundary,
+                allow_standalone_boundary,
+            )
+            if canonical is not None:
+                add_spelling(canonical, "canonical")
+            else:
+                canonical_unavailable_count += 1
+                if len(canonical_unavailable) < 50:
+                    canonical_unavailable.append({"word": word, "missing": missing})
+
+        shortest, unmatched, shortest_used_folded = tokenize_bpe_shortest(
+            word,
+            token_set,
+            token_to_id,
+            max_token_len,
+            word_boundary,
+            folded_token_index,
         )
-        if pieces is None:
+        add_spelling(shortest, "shortest", shortest_used_folded)
+
+        if add_character_fallback:
+            characters, _, characters_used_folded = tokenize_bpe_characters(
+                word,
+                token_set,
+                word_boundary,
+                allow_standalone_boundary,
+                folded_token_index,
+            )
+            add_spelling(characters, "character", characters_used_folded)
+
+        if not spellings:
             rejected.append({"word": word, "unmatched": unmatched})
             continue
-        if used_folded:
-            case_insensitive += 1
-        if len(pieces) == 1:
-            one_piece += 1
-        else:
-            bpe += 1
-        fout.write(word + " " + " ".join(pieces) + "\n")
+        if len(spellings) > 1:
+            multi_spelling_words += 1
+        spelling_count_histogram[len(spellings)] = (
+            spelling_count_histogram.get(len(spellings), 0) + 1
+        )
+        for pieces in spellings:
+            fout.write(word + " " + " ".join(pieces) + "\n")
+            entry_count += 1
     return {
         "direct_entries": one_piece,
         "byte_fallback_entries": 0,
         "bpe_entries": bpe,
         "case_insensitive_entries": case_insensitive,
+        "entry_count": entry_count,
+        "canonical_entries": canonical_entries,
+        "shortest_entries": shortest_entries,
+        "character_fallback_entries": character_fallback_entries,
+        "multi_spelling_words": multi_spelling_words,
+        "spelling_count_histogram": spelling_count_histogram,
+        "canonical_unavailable_count": canonical_unavailable_count,
+        "canonical_unavailable_examples": canonical_unavailable,
+        "sentencepiece_compatibility": sentencepiece_compatibility,
         "rejected": rejected,
     }
 
@@ -272,6 +514,28 @@ def main() -> int:
         ),
     )
     parser.add_argument(
+        "--sentencepiece-model",
+        help=(
+            "SentencePiece model used to generate the AM training labels. When "
+            "set, its canonical spelling is emitted before fallback spellings."
+        ),
+    )
+    parser.add_argument(
+        "--bpe-max-spellings",
+        type=int,
+        default=3,
+        help="Maximum unique BPE spellings emitted for each word.",
+    )
+    parser.add_argument(
+        "--bpe-add-character-fallback",
+        action="store_true",
+        help=(
+            "Also emit a character spelling when every required character token "
+            "is available. The leading boundary is attached to the first letter "
+            "unless --bpe-allow-standalone-boundary is enabled."
+        ),
+    )
+    parser.add_argument(
         "--ignore-case",
         "--case-insensitive",
         dest="ignore_case",
@@ -291,6 +555,10 @@ def main() -> int:
         ),
     )
     args = parser.parse_args()
+    if args.bpe_max_spellings < 1:
+        parser.error("--bpe-max-spellings must be at least 1")
+    if args.sentencepiece_model and args.tokenization != "bpe":
+        parser.error("--sentencepiece-model requires --tokenization bpe")
 
     token_to_id, _, model_vocab_size = read_symbols(Path(args.tokens))
     words = read_words(Path(args.words))
@@ -311,6 +579,9 @@ def main() -> int:
                 args.bpe_word_boundary,
                 args.bpe_allow_standalone_boundary,
                 args.ignore_case,
+                args.sentencepiece_model,
+                args.bpe_max_spellings,
+                args.bpe_add_character_fallback,
             )
 
     rejected = stats["rejected"]
@@ -325,6 +596,24 @@ def main() -> int:
         "byte_fallback_entries": stats["byte_fallback_entries"],
         "bpe_entries": stats["bpe_entries"],
         "case_insensitive_entries": stats["case_insensitive_entries"],
+        "entry_count": stats.get("entry_count", len(words) - len(rejected)),
+        "sentencepiece_model": args.sentencepiece_model,
+        "bpe_max_spellings": args.bpe_max_spellings,
+        "bpe_add_character_fallback": args.bpe_add_character_fallback,
+        "canonical_entries": stats.get("canonical_entries", 0),
+        "shortest_entries": stats.get("shortest_entries", 0),
+        "character_fallback_entries": stats.get(
+            "character_fallback_entries", 0
+        ),
+        "multi_spelling_words": stats.get("multi_spelling_words", 0),
+        "spelling_count_histogram": stats.get("spelling_count_histogram", {}),
+        "canonical_unavailable_examples": stats.get(
+            "canonical_unavailable_examples", []
+        ),
+        "canonical_unavailable_count": stats.get(
+            "canonical_unavailable_count", 0
+        ),
+        "sentencepiece_compatibility": stats.get("sentencepiece_compatibility"),
         "rejected_count": len(rejected),
         "rejected_examples": rejected[:50],
     }

@@ -57,21 +57,55 @@ If output is empty or strange, first check:
 For English BPE/SentencePiece AM tokens, build the lexicon like this:
 
 ```bash
+PYTHON=/path/to/python-with-sentencepiece \
+SENTENCEPIECE_MODEL=/path/to/the/am_training_tokenizer.model \
+BPE_MAX_SPELLINGS=3 \
+BPE_ADD_CHARACTER_FALLBACK=true \
+wenet/kenlm_lm/run/4_generate_lexicon_for_am.sh
+```
+
+The equivalent direct command is:
+
+```bash
 python3 wenet/kenlm_lm/tools/generate_lexicon_for_am.py \
   --words wenet/kenlm_lm/data/words.txt \
   --tokens model/sherpa-onnx-en-wenet-gigaspeech_int8/tokens.txt \
   --output wenet/kenlm_lm/data/lexicon.txt \
   --report wenet/kenlm_lm/reports/lexicon_report.json \
   --tokenization bpe \
+  --sentencepiece-model /path/to/the/am_training_tokenizer.model \
+  --bpe-max-spellings 3 \
+  --bpe-add-character-fallback \
   --ignore-case \
   --allow-rejected
 ```
 
-In BPE mode the tool maps each LM word to a token sequence by longest matching
-against `tokens.txt`, preferring word-start pieces such as `▁YOU`. For example,
-`PASSENGER'S` can map to `▁PASSENGER ' S`. `--allow-rejected` is useful when
-the LM contains words the AM token set cannot spell, such as digits or markup;
-those words are skipped and listed in the JSON report.
+In BPE mode the tool can emit up to `--bpe-max-spellings` unique spellings for
+each LM word, in this order:
+
+1. The canonical spelling produced by the SentencePiece model used to train
+   the AM.
+2. A globally shortest spelling found in `tokens.txt`. This uses dynamic
+   programming; it does not use the old greedy longest-prefix segmentation.
+3. A character fallback when `--bpe-add-character-fallback` is enabled and all
+   required character tokens exist.
+
+For example, the GigaSpeech tokenizer spells `CIRCULATION` as
+`▁C IR C ULATION`. The old greedy method selected `▁C IR CU LA TION`, which is
+valid token-by-token but may not match the AM path well. Keeping bounded,
+deduplicated alternatives lets the decoder accept the canonical AM path while
+avoiding an unbounded lexicon expansion.
+
+The tool validates the SentencePiece vocabulary against `tokens.txt` and
+rejects an obviously mismatched tokenizer (coverage below 99%). The JSON report
+records tokenizer coverage, total lexicon entries, spelling-count distribution,
+and rejected words. `--allow-rejected` is useful when the LM contains words the
+AM token set cannot spell, such as digits or markup; those words are skipped and
+listed in the report.
+
+Use the exact tokenizer that produced the AM labels. A tokenizer with the same
+vocabulary size is not necessarily compatible. The Python environment running
+the command must have the `sentencepiece` package installed.
 
 Decoder scoring can be tuned without editing the script:
 
