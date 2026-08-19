@@ -191,12 +191,19 @@ retain the legacy `contact_id` alias.
 
 ```bash
 cmake -S . -B build_008 \
+  -DASR_SDK_ONNXRUNTIME_ROOT=/path/to/onnxruntime-linux-x64-1.25.1 \
+  -DASR_SDK_REQUIRED_ORT_VERSION=1.25.1 \
   -DASR_SDK_BUILD_TESTS=ON \
   -DASR_SDK_BUILD_TOOLS=ON \
   -DASR_SDK_BUILD_EXAMPLES=OFF
 cmake --build build_008 -j2
 ctest --test-dir build_008 --output-on-failure
 ```
+
+Release builds support ONNX Runtime 1.16.3 and 1.25.1. Select 1.16.3 by
+changing both the root and `ASR_SDK_REQUIRED_ORT_VERSION`. Build and package a
+separate `libasr_sdk.so` for each exact ORT version; the binaries are not
+interchangeable across the two ORT packages.
 
 ## Package workflow
 
