@@ -512,7 +512,10 @@ def read_sacct_tasks(
             "-X",
             "-j",
             job_id,
-            "--format=JobIDRaw,State,ExitCode",
+            # JobIDRaw is the allocation's internal numeric ID on some Slurm
+            # installations, not the visible <array_job>_<task> identifier.
+            # JobID consistently preserves the array task suffix we validate.
+            "--format=JobID,State,ExitCode",
             "--parsable2",
         ],
         check=True,
