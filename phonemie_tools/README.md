@@ -82,3 +82,30 @@ srun env LD_LIBRARY_PATH=/path/to/miniforge3/lib:$LD_LIBRARY_PATH \
 By default the JSON field named `text` is replaced. Use `--text-key` for a
 different transcript field. Empty transcripts remain empty, blank physical
 lines are skipped, and all non-transcript values are preserved.
+
+## Progress and ETA
+
+The converter counts non-blank JSONL records before inference and reports:
+
+- completed and total records;
+- completion percentage;
+- elapsed wall-clock time;
+- average records per second;
+- approximate remaining time.
+
+While model initialization or a long batch is running, it prints a heartbeat
+every 30 seconds. `--progress-interval` changes that time interval, and
+`--progress-every` also triggers a report after a chosen number of completed
+records. Set both options to `0` to disable progress output:
+
+```bash
+python phonemie_tools/nemo_jsonl_to_phonemes.py \
+  input.jsonl output.jsonl \
+  --backend g2pw \
+  --progress-interval 30 \
+  --progress-every 1000
+```
+
+ETA is unavailable until the first batch completes. It is an estimate based on
+average throughput since startup, so it becomes more stable as additional
+batches finish.

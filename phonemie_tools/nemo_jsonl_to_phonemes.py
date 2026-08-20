@@ -26,9 +26,10 @@ import json
 import multiprocessing
 import os
 import sys
+import time
 from collections import deque
 from pathlib import Path
-from typing import Any, Deque, Iterable, Iterator, List, Optional, Sequence, Tuple
+from typing import Any, Callable, Deque, Iterable, Iterator, List, Optional, Sequence, Tuple
 
 
 DEFAULT_ESPEAK_LIBRARY = "/home/jinyang_wang/.local/lib/libespeak-ng.so"
@@ -216,7 +217,10 @@ def _initialize_g2pw_resources_child(connection: Any) -> None:
         connection.close()
 
 
-def warm_up_g2pw_resources() -> None:
+def warm_up_g2pw_resources(
+    wait_interval: float = 0,
+    on_wait: Optional[Callable[[], None]] = None,
+) -> None:
     """Warm resources in an isolated process before creating ONNX workers.
 
     Loading ONNX Runtime in the parent before ProcessPoolExecutor forks can
@@ -231,7 +235,13 @@ def warm_up_g2pw_resources() -> None:
     )
     process.start()
     child_connection.close()
-    process.join()
+    if wait_interval > 0 and on_wait is not None:
+        while process.is_alive():
+            process.join(timeout=wait_interval)
+            if process.is_alive():
+                on_wait()
+    else:
+        process.join()
 
     error_message = (
         parent_connection.recv() if parent_connection.poll() else None
@@ -376,6 +386,98 @@ def phonemize_batch(texts: Sequence[str]) -> List[str]:
 Record = Tuple[int, dict[str, Any], str]
 
 
+def count_manifest_records(input_path: Path) -> int:
+    """Count non-blank JSONL records for exact progress and ETA reporting."""
+    with input_path.open("r", encoding="utf-8") as input_file:
+        return sum(1 for raw_line in input_file if raw_line.strip())
+
+
+def format_duration(seconds: float) -> str:
+    """Format a non-negative duration as HH:MM:SS."""
+    total_seconds = max(0, round(seconds))
+    hours, remainder = divmod(total_seconds, 3600)
+    minutes, seconds = divmod(remainder, 60)
+    return f"{hours:02d}:{minutes:02d}:{seconds:02d}"
+
+
+class ProgressReporter:
+    """Report record progress, elapsed time, throughput, and approximate ETA."""
+
+    def __init__(
+        self,
+        total_records: int,
+        progress_every: int,
+        progress_interval: float,
+        clock: Callable[[], float] = time.monotonic,
+    ) -> None:
+        self.total_records = total_records
+        self.progress_every = progress_every
+        self.progress_interval = progress_interval
+        self.clock = clock
+        self.started_at = clock()
+        self.last_report_at = self.started_at
+        self.next_record_report = progress_every
+
+    @property
+    def enabled(self) -> bool:
+        return self.progress_every > 0 or self.progress_interval > 0
+
+    def report(
+        self,
+        completed_records: int,
+        *,
+        waiting: bool = False,
+        force: bool = False,
+    ) -> None:
+        """Print a report when a record/time threshold has been reached."""
+        if not self.enabled:
+            return
+
+        now = self.clock()
+        record_due = (
+            self.progress_every > 0
+            and completed_records >= self.next_record_report
+        )
+        time_due = (
+            self.progress_interval > 0
+            and now - self.last_report_at >= self.progress_interval
+        )
+        if not (force or record_due or time_due):
+            return
+
+        elapsed = max(0.0, now - self.started_at)
+        percentage = (
+            100.0
+            if self.total_records == 0
+            else completed_records / self.total_records * 100.0
+        )
+        message = (
+            f"progress: {completed_records}/{self.total_records} "
+            f"({percentage:.1f}%); elapsed {format_duration(elapsed)}"
+        )
+        if completed_records > 0 and elapsed > 0:
+            records_per_second = completed_records / elapsed
+            remaining_records = max(
+                0,
+                self.total_records - completed_records,
+            )
+            eta = remaining_records / records_per_second
+            message += (
+                f"; {records_per_second:.2f} records/s; "
+                f"ETA {format_duration(eta)}"
+            )
+        else:
+            message += "; rate unavailable; ETA unavailable"
+            if waiting:
+                message += " (initializing model or processing first batch)"
+        print(message, file=sys.stderr, flush=True)
+        self.last_report_at = now
+        if self.progress_every > 0:
+            self.next_record_report = (
+                completed_records // self.progress_every + 1
+            ) * self.progress_every
+
+
 def read_batches(
     input_path: Path,
     text_key: str,
@@ -425,12 +527,22 @@ def write_completed_batch(
     batch: Sequence[Record],
     future: concurrent.futures.Future[List[str]],
     text_key: str,
+    wait_interval: float = 0,
+    on_wait: Optional[Callable[[], None]] = None,
 ) -> int:
     """Wait for one batch and write it, preserving input record order."""
     first_line = batch[0][0]
     last_line = batch[-1][0]
     try:
-        phoneme_texts = future.result()
+        if wait_interval > 0 and on_wait is not None:
+            while True:
+                try:
+                    phoneme_texts = future.result(timeout=wait_interval)
+                    break
+                except concurrent.futures.TimeoutError:
+                    on_wait()
+        else:
+            phoneme_texts = future.result()
     except Exception as error:
         raise RuntimeError(
             f"Failed to phonemize input lines {first_line}-{last_line}: {error}"
@@ -461,6 +573,7 @@ def convert_manifest(
     batch_size: int,
     pending_batches: int,
     progress_every: int,
+    progress_interval: float = 30.0,
     backend: str = DEFAULT_BACKEND,
 ) -> int:
     """Convert a manifest with bounded memory and ordered parallel output."""
@@ -480,6 +593,25 @@ def convert_manifest(
         raise ValueError("--pending-batches must be at least 1")
     if progress_every < 0:
         raise ValueError("--progress-every must be at least 0")
+    if progress_interval < 0:
+        raise ValueError("--progress-interval must be at least 0")
+
+    progress_enabled = progress_every > 0 or progress_interval > 0
+    if progress_enabled:
+        print(f"counting records in {input_path}", file=sys.stderr, flush=True)
+    total_records = count_manifest_records(input_path)
+    reporter = ProgressReporter(
+        total_records=total_records,
+        progress_every=progress_every,
+        progress_interval=progress_interval,
+    )
+    if progress_enabled:
+        print(
+            f"starting phonemization: {total_records} records; "
+            f"backend={backend}; workers={workers}; batch_size={batch_size}",
+            file=sys.stderr,
+            flush=True,
+        )
     # Import and configure once in the parent so dependency/API failures happen
     # before the output file or process pool is created.  The real G2PW model is
     # lazy and is only loaded by a worker on its first non-empty transcript.
@@ -505,7 +637,10 @@ def convert_manifest(
         # g2p-mix initializes both its ModelScope and g2p-en/NLTK resources
         # lazily. Warm them once to avoid concurrent first-use downloads and
         # file reads when several worker processes start together.
-        warm_up_g2pw_resources()
+        warm_up_g2pw_resources(
+            wait_interval=progress_interval,
+            on_wait=lambda: reporter.report(0, waiting=True, force=True),
+        )
     else:
         create_g2pw_converter()
 
@@ -514,7 +649,29 @@ def convert_manifest(
         Tuple[List[Record], concurrent.futures.Future[List[str]]]
     ] = deque()
     records_written = 0
-    next_progress = progress_every
+
+    def write_pending_batch(
+        output_file: Any,
+        batch: Sequence[Record],
+        future: concurrent.futures.Future[List[str]],
+    ) -> None:
+        nonlocal records_written
+        records_written += write_completed_batch(
+            output_file,
+            batch,
+            future,
+            text_key,
+            wait_interval=progress_interval,
+            on_wait=lambda: reporter.report(
+                records_written,
+                waiting=True,
+                force=True,
+            ),
+        )
+        reporter.report(
+            records_written,
+            force=records_written == total_records,
+        )
 
     with concurrent.futures.ProcessPoolExecutor(
         max_workers=workers,
@@ -529,37 +686,22 @@ def convert_manifest(
 
                 if len(pending) >= pending_batches:
                     completed_batch, completed_future = pending.popleft()
-                    records_written += write_completed_batch(
+                    write_pending_batch(
                         output_file,
                         completed_batch,
                         completed_future,
-                        text_key,
                     )
-                    if progress_every > 0 and records_written >= next_progress:
-                        print(
-                            f"phonemized {records_written} records",
-                            file=sys.stderr,
-                        )
-                        next_progress = (
-                            records_written // progress_every + 1
-                        ) * progress_every
 
             while pending:
                 completed_batch, completed_future = pending.popleft()
-                records_written += write_completed_batch(
+                write_pending_batch(
                     output_file,
                     completed_batch,
                     completed_future,
-                    text_key,
                 )
-                if progress_every > 0 and records_written >= next_progress:
-                    print(
-                        f"phonemized {records_written} records",
-                        file=sys.stderr,
-                    )
-                    next_progress = (
-                        records_written // progress_every + 1
-                    ) * progress_every
+
+    if total_records == 0:
+        reporter.report(0, force=True)
 
     return records_written
 
@@ -641,7 +783,20 @@ def parse_args(argv: Iterable[str] | None = None) -> argparse.Namespace:
         "--progress-every",
         type=int,
         default=10000,
-        help="report progress every N records; 0 disables it (default: 10000)",
+        help=(
+            "report progress after every N completed records; 0 disables the "
+            "record trigger (default: 10000)"
+        ),
+    )
+    parser.add_argument(
+        "--progress-interval",
+        type=float,
+        default=30.0,
+        help=(
+            "report a heartbeat after this many seconds while waiting and "
+            "include elapsed time, rate, and ETA; 0 disables the time trigger "
+            "(default: 30)"
+        ),
     )
     return parser.parse_args(argv)
 
@@ -671,6 +826,7 @@ def main(argv: Iterable[str] | None = None) -> int:
             batch_size=args.batch_size,
             pending_batches=pending_batches,
             progress_every=args.progress_every,
+            progress_interval=args.progress_interval,
             backend=args.backend,
         )
     except (OSError, RuntimeError, ValueError) as error:

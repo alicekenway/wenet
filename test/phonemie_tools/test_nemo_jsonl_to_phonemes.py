@@ -22,7 +22,7 @@ class ImmediateFuture:
             self.value = None
             self.error = error
 
-    def result(self):
+    def result(self, timeout=None):
         if self.error is not None:
             raise self.error
         return self.value
@@ -224,6 +224,46 @@ def test_g2pw_manifest_preserves_jsonl_fields_and_order(tmp_path, monkeypatch):
         }
 
 
+def test_progress_reports_total_rate_and_eta(tmp_path, monkeypatch, capsys):
+    install_fake_g2p_mix(monkeypatch, outputs={"中国": ("ipa",)})
+    monkeypatch.setattr(
+        converter.concurrent.futures,
+        "ProcessPoolExecutor",
+        InlineExecutor,
+    )
+    input_path = tmp_path / "input.jsonl"
+    input_path.write_text(
+        '\n{"audio_filepath":"/one.wav","text":"中国","duration":1.0}\n\n',
+        encoding="utf-8",
+    )
+
+    converter.convert_manifest(
+        input_path=input_path,
+        output_path=tmp_path / "output.jsonl",
+        espeak_library="unused",
+        language="unused",
+        word_token=None,
+        text_key="text",
+        workers=1,
+        batch_size=1,
+        pending_batches=1,
+        progress_every=1,
+        progress_interval=0,
+        backend="g2pw",
+    )
+
+    error_output = capsys.readouterr().err
+    assert "starting phonemization: 1 records" in error_output
+    assert "progress: 1/1 (100.0%)" in error_output
+    assert "records/s" in error_output
+    assert "ETA 00:00:00" in error_output
+
+
+def test_progress_duration_format():
+    assert converter.format_duration(0) == "00:00:00"
+    assert converter.format_duration(3661.6) == "01:01:02"
+
+
 def test_g2pw_failure_reports_jsonl_line_range(tmp_path, monkeypatch):
     install_fake_g2p_mix(monkeypatch, failure_text="坏")
     monkeypatch.setattr(
@@ -267,7 +307,9 @@ def test_parallel_g2pw_warms_shared_resources_before_workers(
     events = []
     install_fake_g2p_mix(monkeypatch, outputs={"中国": ("ipa",)})
 
-    def fake_warm_up():
+    def fake_warm_up(**arguments):
+        assert arguments["wait_interval"] == 30.0
+        assert callable(arguments["on_wait"])
         events.append("warm-up")
 
     class RecordingExecutor(InlineExecutor):
