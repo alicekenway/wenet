@@ -109,3 +109,48 @@ python phonemie_tools/nemo_jsonl_to_phonemes.py \
 ETA is unavailable until the first batch completes. It is an estimate based on
 average throughput since startup, so it becomes more stable as additional
 batches finish.
+
+## Slurm job arrays
+
+`--slurm` validates the complete manifest, splits its non-blank records into
+balanced contiguous shards, and derives the shard count and concurrency from a
+zero-based `--array` option inside `--sbatch-args`:
+
+```bash
+python phonemie_tools/nemo_jsonl_to_phonemes.py \
+  input.jsonl output.jsonl \
+  --backend g2pw \
+  --slurm \
+  --sbatch-args="--array=0-31%8 --cpus-per-task=2 --mem=8G --time=04:00:00" \
+  --wait
+```
+
+This example creates 32 shards and allows at most eight simultaneous array
+tasks. Each task retains its own input, atomic output, status JSON, stdout log,
+and stderr log. The controller waits for all tasks, checks both `sacct` and the
+status files, then merges shards in their original record order. A failed,
+cancelled, timed-out, missing, or out-of-memory task prevents the final output
+from being replaced.
+
+Without `--wait`, submission returns immediately and prints the job ID, run
+directory, and an exact command for finishing later:
+
+```bash
+python phonemie_tools/nemo_jsonl_to_phonemes.py \
+  --slurm-finalize /shared/path/to/the/run-directory
+```
+
+Use `--slurm-work-dir` to choose the new artifact directory. Otherwise a unique
+hidden directory is created beside the final output. All artifacts are retained
+after a successful merge. The input, output, environment, repository, and run
+directory must be on storage shared by the login and compute nodes.
+
+The accepted array syntax is `0-N` or `0-N%M`. Lists, steps, nonzero starting
+indices, and arrays with more tasks than input records are rejected. The
+controller owns `sbatch` options for output, error, working directory,
+parsable output, wrapping, and waiting; put resource options such as partition,
+account, QoS, CPU, memory, and time in `--sbatch-args`.
+
+`--workers` is local to each array task. For G2PW, start with one converter
+worker and two CPUs per array task because every worker loads its own large ONNX
+model.

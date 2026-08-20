@@ -25,6 +25,7 @@ import concurrent.futures
 import json
 import multiprocessing
 import os
+import subprocess
 import sys
 import time
 from collections import deque
@@ -714,8 +715,18 @@ def parse_word_token(value: str) -> Optional[str]:
 def parse_args(argv: Iterable[str] | None = None) -> argparse.Namespace:
     default_espeak_workers = min(8, os.cpu_count() or 1)
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("input_jsonl", type=Path, help="input NeMo JSONL manifest")
-    parser.add_argument("output_jsonl", type=Path, help="output phoneme JSONL manifest")
+    parser.add_argument(
+        "input_jsonl",
+        type=Path,
+        nargs="?",
+        help="input NeMo JSONL manifest",
+    )
+    parser.add_argument(
+        "output_jsonl",
+        type=Path,
+        nargs="?",
+        help="output phoneme JSONL manifest",
+    )
     parser.add_argument(
         "--backend",
         choices=SUPPORTED_BACKENDS,
@@ -798,11 +809,101 @@ def parse_args(argv: Iterable[str] | None = None) -> argparse.Namespace:
             "(default: 30)"
         ),
     )
+    parser.add_argument(
+        "--slurm",
+        action="store_true",
+        help="split the input and submit a Slurm job array",
+    )
+    parser.add_argument(
+        "--sbatch-args",
+        help=(
+            "quoted sbatch arguments including a zero-based --array option, "
+            "for example '--array=0-31%%8 --cpus-per-task=2 --mem=8G'"
+        ),
+    )
+    parser.add_argument(
+        "--wait",
+        action="store_true",
+        help="in --slurm mode, wait for all tasks and merge their outputs",
+    )
+    parser.add_argument(
+        "--slurm-work-dir",
+        type=Path,
+        help="explicit new directory for retained Slurm run artifacts",
+    )
+    parser.add_argument(
+        "--slurm-finalize",
+        type=Path,
+        metavar="RUN_DIR",
+        help="wait for and merge a previously submitted Slurm run",
+    )
+    parser.add_argument(
+        "--slurm-worker",
+        type=Path,
+        metavar="RUN_DIR",
+        help=argparse.SUPPRESS,
+    )
     return parser.parse_args(argv)
 
 
 def main(argv: Iterable[str] | None = None) -> int:
     args = parse_args(argv)
+
+    if args.slurm_worker is not None:
+        try:
+            from slurm_phoneme_array import run_array_worker
+
+            task_id_value = os.environ.get("SLURM_ARRAY_TASK_ID")
+            if task_id_value is None:
+                raise RuntimeError(
+                    "--slurm-worker requires SLURM_ARRAY_TASK_ID"
+                )
+            try:
+                task_id = int(task_id_value)
+            except ValueError as error:
+                raise RuntimeError(
+                    f"invalid SLURM_ARRAY_TASK_ID: {task_id_value!r}"
+                ) from error
+            records_written = run_array_worker(
+                args.slurm_worker,
+                task_id,
+                convert_manifest,
+            )
+        except (OSError, RuntimeError, ValueError) as error:
+            print(f"error: {error}", file=sys.stderr)
+            return 1
+        print(
+            f"Slurm array task {task_id} wrote {records_written} records",
+            file=sys.stderr,
+        )
+        return 0
+
+    if args.slurm_finalize is not None:
+        if args.input_jsonl is not None or args.output_jsonl is not None:
+            print(
+                "error: positional input/output paths are not used with "
+                "--slurm-finalize",
+                file=sys.stderr,
+            )
+            return 1
+        try:
+            from slurm_phoneme_array import finalize_slurm_run
+
+            output_path = finalize_slurm_run(args.slurm_finalize)
+        except (OSError, RuntimeError, ValueError, subprocess.SubprocessError) as error:
+            print(f"error: {error}", file=sys.stderr)
+            return 1
+        print(f"merged Slurm outputs into {output_path}", file=sys.stderr)
+        return 0
+
+    if args.input_jsonl is None or args.output_jsonl is None:
+        print(
+            "error: input_jsonl and output_jsonl are required unless "
+            "--slurm-finalize or --slurm-worker is used",
+            file=sys.stderr,
+        )
+        return 1
+
     workers = args.workers
     if workers is None:
         workers = 1 if args.backend == G2PW_BACKEND else min(
@@ -813,6 +914,88 @@ def main(argv: Iterable[str] | None = None) -> int:
         if args.pending_batches is not None
         else workers * 2
     )
+
+    if not args.slurm and (
+        args.sbatch_args is not None
+        or args.wait
+        or args.slurm_work_dir is not None
+    ):
+        print(
+            "error: --sbatch-args, --wait, and --slurm-work-dir require "
+            "--slurm",
+            file=sys.stderr,
+        )
+        return 1
+
+    if args.slurm:
+        if args.sbatch_args is None:
+            print("error: --slurm requires --sbatch-args", file=sys.stderr)
+            return 1
+        conversion = {
+            "espeak_library": args.espeak_library,
+            "language": args.language,
+            "word_token": args.word_token,
+            "text_key": args.text_key,
+            "workers": workers,
+            "batch_size": args.batch_size,
+            "pending_batches": pending_batches,
+            "progress_every": args.progress_every,
+            "progress_interval": args.progress_interval,
+            "backend": args.backend,
+        }
+        try:
+            from slurm_phoneme_array import (
+                finalize_command,
+                finalize_slurm_run,
+                prepare_slurm_run,
+            )
+
+            result = prepare_slurm_run(
+                input_path=args.input_jsonl.resolve(),
+                output_path=args.output_jsonl.resolve(),
+                text_key=args.text_key,
+                conversion=conversion,
+                sbatch_args=args.sbatch_args,
+                requested_run_dir=args.slurm_work_dir,
+                python_executable=Path(sys.executable),
+                script_path=Path(__file__).resolve(),
+                base_prefix=Path(sys.base_prefix),
+            )
+            if result["empty"]:
+                print(
+                    f"input contains no records; wrote empty output to "
+                    f"{args.output_jsonl.resolve()}",
+                    file=sys.stderr,
+                )
+                return 0
+
+            job_id = result["job_id"]
+            run_dir = result["run_dir"]
+            print(
+                f"submitted Slurm array {job_id}; run directory: {run_dir}",
+                file=sys.stderr,
+            )
+            if args.wait:
+                output_path = finalize_slurm_run(run_dir)
+                print(
+                    f"merged Slurm outputs into {output_path}",
+                    file=sys.stderr,
+                )
+            else:
+                command = finalize_command(
+                    Path(sys.executable),
+                    Path(__file__).resolve(),
+                    run_dir,
+                )
+                print(
+                    "submission returned without waiting; finalize later with:\n"
+                    f"  {command}",
+                    file=sys.stderr,
+                )
+            return 0
+        except (OSError, RuntimeError, ValueError, subprocess.SubprocessError) as error:
+            print(f"error: {error}", file=sys.stderr)
+            return 1
 
     try:
         records_written = convert_manifest(
