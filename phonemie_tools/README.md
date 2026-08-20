@@ -42,6 +42,21 @@ does not add a word-boundary token. Unknown Chinese characters are strict: an
 unsupported pronunciation stops conversion instead of silently dropping a
 training label.
 
+Reviewed Mainland Mandarin corrections live in the independent mapping file
+`g2pw_pinyin_overrides.json`. It currently fixes an incompatibility in the
+downloaded G2PW model: its `崖` label `yai2` (Taiwan-style `ㄧㄞ2`) is normalized
+to standard Hanyu Pinyin `ya2` (`ㄧㄚ2`) before IPA conversion. Each override is
+nested under its exact character and original syllable, so `yai2` is not
+replaced globally. For example:
+
+```json
+{
+  "崖": {
+    "yai2": "ya2"
+  }
+}
+```
+
 The first non-empty G2PW conversion downloads the `pengzhendong/g2pw` model
 snapshot through ModelScope unless it is already cached. Pre-cache it before
 running in an offline environment. Each worker loads its own model, so the

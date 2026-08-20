@@ -58,9 +58,21 @@ def install_fake_g2p_mix(monkeypatch, outputs=None, failure_text=None):
             phones = outputs.get(text, ())
             return types.SimpleNamespace(phones=phones)
 
+    class FakeG2PWBackend:
+        name = "g2pw"
+
+        def __init__(self, **arguments):
+            self.arguments = arguments
+
+        def _convert(self, text):
+            return ()
+
     module = types.ModuleType("g2p_mix")
     module.G2P = FakeG2P
+    backends_module = types.ModuleType("g2p_mix.backends")
+    backends_module.G2PWBackend = FakeG2PWBackend
     monkeypatch.setitem(sys.modules, "g2p_mix", module)
+    monkeypatch.setitem(sys.modules, "g2p_mix.backends", backends_module)
     return calls
 
 
@@ -81,14 +93,57 @@ def test_g2pw_worker_uses_surface_tone_ipa_configuration(monkeypatch):
     converter.initialize_worker("unused", "unused", "▁", backend="g2pw")
     result = converter.phonemize_batch(["中国 idea", ""])
 
-    assert calls == [{
+    assert len(calls) == 1
+    assert calls[0]["backend"].name == "g2pw"
+    assert calls[0]["backend"].arguments == {"unknown_policy": "strict"}
+    assert {key: value for key, value in calls[0].items() if key != "backend"} == {
         "mode": "mandarin",
         "output": "ipa",
-        "backend": "g2pw",
         "unknown": "strict",
         "tone_sandhi": True,
-    }]
+    }
     assert result == ["ʈ͡ʂ ʊ ŋ˥˥ k w o˧˥ a ɪ d ˈi ə", ""]
+
+
+def test_g2pw_override_mapping_is_character_specific(tmp_path):
+    mapping_path = tmp_path / "overrides.json"
+    mapping_path.write_text(
+        '{"崖":{"yai2":"ya2"}}\n',
+        encoding="utf-8",
+    )
+
+    overrides = converter.load_g2pw_pinyin_overrides(mapping_path)
+
+    assert converter.apply_g2pw_pinyin_overrides(
+        "悬崖",
+        ("xuan2", "yai2"),
+        overrides,
+    ) == ("xuan2", "ya2")
+    assert converter.apply_g2pw_pinyin_overrides(
+        "呀",
+        ("yai2",),
+        overrides,
+    ) == ("yai2",)
+
+
+@pytest.mark.parametrize(
+    "contents,error",
+    [
+        ("[]", "must contain a JSON object"),
+        ('{"悬崖":{"yai2":"ya2"}}', "must be one character"),
+        ('{"崖":{"yai2":"yai2"}}', "distinct, non-empty"),
+    ],
+)
+def test_g2pw_override_mapping_rejects_invalid_entries(
+    tmp_path,
+    contents,
+    error,
+):
+    mapping_path = tmp_path / "overrides.json"
+    mapping_path.write_text(contents, encoding="utf-8")
+
+    with pytest.raises(RuntimeError, match=error):
+        converter.load_g2pw_pinyin_overrides(mapping_path)
 
 
 def test_g2pw_rejects_invalid_phone_sequences(monkeypatch):

@@ -39,6 +39,9 @@ ESPEAK_BACKEND = "espeak"
 G2PW_BACKEND = "g2pw"
 SUPPORTED_BACKENDS = (ESPEAK_BACKEND, G2PW_BACKEND)
 G2PW_WARMUP_TEXT = "测试 test"
+DEFAULT_G2PW_OVERRIDES_PATH = Path(__file__).with_name(
+    "g2pw_pinyin_overrides.json"
+)
 G2P_MIX_REQUIREMENT = (
     "g2p-mix[g2pw] @ "
     "git+https://github.com/pengzhendong/g2p-mix.git@"
@@ -55,10 +58,78 @@ _worker_word_token: Optional[str] = DEFAULT_WORD_TOKEN
 _worker_g2p: Any = None
 
 
+G2PWPinyinOverrides = dict[Tuple[str, str], str]
+
+
+def load_g2pw_pinyin_overrides(
+    path: Path = DEFAULT_G2PW_OVERRIDES_PATH,
+) -> G2PWPinyinOverrides:
+    """Load and validate character-specific Pinyin corrections from JSON."""
+    try:
+        with path.open("r", encoding="utf-8") as mapping_file:
+            raw_mapping = json.load(mapping_file)
+    except json.JSONDecodeError as error:
+        raise RuntimeError(
+            f"invalid G2PW override JSON in {path}: {error.msg}"
+        ) from error
+    except OSError as error:
+        raise RuntimeError(
+            f"cannot read G2PW override mapping {path}: {error}"
+        ) from error
+
+    if not isinstance(raw_mapping, dict):
+        raise RuntimeError(
+            f"G2PW override mapping {path} must contain a JSON object"
+        )
+
+    overrides: G2PWPinyinOverrides = {}
+    for character, pronunciations in raw_mapping.items():
+        if not isinstance(character, str) or len(character) != 1:
+            raise RuntimeError(
+                f"G2PW override key {character!r} in {path} must be one "
+                "character"
+            )
+        if not isinstance(pronunciations, dict) or not pronunciations:
+            raise RuntimeError(
+                f"G2PW overrides for {character!r} in {path} must be a "
+                "non-empty JSON object"
+            )
+        for source, replacement in pronunciations.items():
+            if (
+                not isinstance(source, str)
+                or not source
+                or not isinstance(replacement, str)
+                or not replacement
+                or source == replacement
+            ):
+                raise RuntimeError(
+                    f"G2PW override {character!r}: {source!r} -> "
+                    f"{replacement!r} in {path} must contain distinct, "
+                    "non-empty string pronunciations"
+                )
+            overrides[(character, source)] = replacement
+    return overrides
+
+
+def apply_g2pw_pinyin_overrides(
+    text: str,
+    syllables: Sequence[Optional[str]],
+    overrides: G2PWPinyinOverrides,
+) -> Tuple[Optional[str], ...]:
+    """Apply reviewed character-and-pronunciation G2PW corrections."""
+    return tuple(
+        overrides.get((text[index], syllable), syllable)
+        if index < len(text)
+        else syllable
+        for index, syllable in enumerate(syllables)
+    )
+
+
 def create_g2pw_converter() -> Any:
     """Create the pinned g2p-mix Mandarin-to-IPA converter."""
     try:
         from g2p_mix import G2P
+        from g2p_mix.backends import G2PWBackend
     except (ImportError, ModuleNotFoundError) as error:
         raise RuntimeError(
             "the IPA-capable g2p-mix G2P API is unavailable; install the "
@@ -66,11 +137,20 @@ def create_g2pw_converter() -> Any:
             f"({G2P_MIX_REQUIREMENT})"
         ) from error
 
+    overrides = load_g2pw_pinyin_overrides()
+
+    class CorrectedG2PWBackend(G2PWBackend):
+        """Normalize reviewed upstream G2PW syllables before validation."""
+
+        def _convert(self, text: str) -> Tuple[Optional[str], ...]:
+            syllables = super()._convert(text)
+            return apply_g2pw_pinyin_overrides(text, syllables, overrides)
+
     try:
         converter = G2P(
             mode="mandarin",
             output="ipa",
-            backend="g2pw",
+            backend=CorrectedG2PWBackend(unknown_policy="strict"),
             unknown="strict",
             tone_sandhi=True,
         )
