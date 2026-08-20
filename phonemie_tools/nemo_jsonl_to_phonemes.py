@@ -23,6 +23,7 @@ from __future__ import annotations
 import argparse
 import concurrent.futures
 import json
+import multiprocessing
 import os
 import sys
 from collections import deque
@@ -92,8 +93,20 @@ def create_g2pw_converter() -> Any:
     return converter
 
 
-def warm_up_g2pw_resources() -> None:
-    """Populate G2PW and English caches before parallel workers start.
+def format_exception_chain(error: BaseException) -> str:
+    """Render an exception together with useful wrapped root causes."""
+    messages = []
+    current: Optional[BaseException] = error
+    while current is not None:
+        message = str(current) or type(current).__name__
+        if not messages or message != messages[-1]:
+            messages.append(message)
+        current = current.__cause__ or current.__context__
+    return " -> ".join(messages)
+
+
+def initialize_g2pw_resources() -> None:
+    """Populate G2PW and English caches in the current process.
 
     Both G2PW's ModelScope snapshot and g2p-en's NLTK resources are loaded
     lazily. If several fresh workers encounter their first non-empty input at
@@ -106,9 +119,54 @@ def warm_up_g2pw_resources() -> None:
         converter(G2PW_WARMUP_TEXT)
     except Exception as error:
         raise RuntimeError(
-            "failed to initialize the G2PW and English resources before "
-            f"starting parallel workers: {error}"
+            "failed to initialize the G2PW and English resources: "
+            f"{format_exception_chain(error)}"
         ) from error
+
+
+def _initialize_g2pw_resources_child(connection: Any) -> None:
+    """Run cache initialization and return any error to the parent."""
+    try:
+        initialize_g2pw_resources()
+    except BaseException as error:
+        connection.send(format_exception_chain(error))
+    else:
+        connection.send(None)
+    finally:
+        connection.close()
+
+
+def warm_up_g2pw_resources() -> None:
+    """Warm resources in an isolated process before creating ONNX workers.
+
+    Loading ONNX Runtime in the parent before ProcessPoolExecutor forks can
+    deadlock its children. A spawned, short-lived process prepares the shared
+    caches and exits, leaving the parent safe to create the real worker pool.
+    """
+    context = multiprocessing.get_context("spawn")
+    parent_connection, child_connection = context.Pipe(duplex=False)
+    process = context.Process(
+        target=_initialize_g2pw_resources_child,
+        args=(child_connection,),
+    )
+    process.start()
+    child_connection.close()
+    process.join()
+
+    error_message = (
+        parent_connection.recv() if parent_connection.poll() else None
+    )
+    parent_connection.close()
+    if error_message is not None:
+        raise RuntimeError(
+            "failed to initialize the G2PW and English resources before "
+            f"starting parallel workers: {error_message}"
+        )
+    if process.exitcode != 0:
+        raise RuntimeError(
+            "the isolated G2PW resource initializer exited with status "
+            f"{process.exitcode}"
+        )
 
 
 def initialize_worker(
@@ -202,7 +260,8 @@ def phonemize_g2pw_batch(texts: Sequence[str]) -> List[str]:
             if len(source_text) > len(preview):
                 preview += "..."
             raise RuntimeError(
-                f"g2p-mix failed for batch item {index + 1}: {error}; "
+                f"g2p-mix failed for batch item {index + 1}: "
+                f"{format_exception_chain(error)}; "
                 f"text={preview!r}"
             ) from error
 

@@ -47,9 +47,22 @@ snapshot through ModelScope unless it is already cached. Pre-cache it before
 running in an offline environment. Each worker loads its own model, so the
 default for `--backend g2pw` is one worker; increasing `--workers` increases
 memory use. When more than one G2PW worker is requested, the converter first
-performs one mixed Mandarin-English warm-up conversion. This serializes the
-initial ModelScope and g2p-en/NLTK cache setup before the worker processes are
-started.
+performs one mixed Mandarin-English warm-up conversion in an isolated process.
+This serializes the initial ModelScope and g2p-en/NLTK cache setup before the
+worker processes are started, without forking a live ONNX Runtime session.
+
+If a virtual environment was created from Miniforge/Conda and a cluster's
+compute nodes have an older system C++ runtime, make the environment's library
+directory visible when launching Python. A missing `GLIBCXX` symbol can be
+wrapped by `g2p-mix` as the misleading error `English homograph rules are
+unavailable`:
+
+```bash
+srun env LD_LIBRARY_PATH=/path/to/miniforge3/lib:$LD_LIBRARY_PATH \
+  /path/to/g2pw_env/bin/python \
+  phonemie_tools/nemo_jsonl_to_phonemes.py \
+  input.jsonl output.jsonl --backend g2pw --workers 1
+```
 
 By default the JSON field named `text` is replaced. Use `--text-key` for a
 different transcript field. Empty transcripts remain empty, blank physical
