@@ -37,6 +37,7 @@ DEFAULT_WORD_TOKEN = "▁"
 ESPEAK_BACKEND = "espeak"
 G2PW_BACKEND = "g2pw"
 SUPPORTED_BACKENDS = (ESPEAK_BACKEND, G2PW_BACKEND)
+G2PW_WARMUP_TEXT = "测试 test"
 G2P_MIX_REQUIREMENT = (
     "g2p-mix[g2pw] @ "
     "git+https://github.com/pengzhendong/g2p-mix.git@"
@@ -89,6 +90,25 @@ def create_g2pw_converter() -> Any:
             "the pinned dependency from phonemie_tools/requirements-g2pw.txt"
         )
     return converter
+
+
+def warm_up_g2pw_resources() -> None:
+    """Populate G2PW and English caches before parallel workers start.
+
+    Both G2PW's ModelScope snapshot and g2p-en's NLTK resources are loaded
+    lazily. If several fresh workers encounter their first non-empty input at
+    once, their cache initialization can race and leave one worker observing a
+    temporarily unavailable resource. A single mixed-language conversion in
+    the parent makes those shared on-disk resources ready first.
+    """
+    converter = create_g2pw_converter()
+    try:
+        converter(G2PW_WARMUP_TEXT)
+    except Exception as error:
+        raise RuntimeError(
+            "failed to initialize the G2PW and English resources before "
+            f"starting parallel workers: {error}"
+        ) from error
 
 
 def initialize_worker(
@@ -178,8 +198,12 @@ def phonemize_g2pw_batch(texts: Sequence[str]) -> List[str]:
             result = _worker_g2p(source_text)
             phones = result.phones
         except Exception as error:
+            preview = source_text[:120]
+            if len(source_text) > len(preview):
+                preview += "..."
             raise RuntimeError(
-                f"g2p-mix failed for batch item {index + 1}: {error}"
+                f"g2p-mix failed for batch item {index + 1}: {error}; "
+                f"text={preview!r}"
             ) from error
 
         if isinstance(phones, (str, bytes)) or not isinstance(phones, Sequence):
@@ -338,6 +362,11 @@ def convert_manifest(
                 "phonemizer is not installed in this Python environment"
             ) from error
         EspeakWrapper.set_library(espeak_library)
+    elif workers > 1:
+        # g2p-mix initializes both its ModelScope and g2p-en/NLTK resources
+        # lazily. Warm them once to avoid concurrent first-use downloads and
+        # file reads when several worker processes start together.
+        warm_up_g2pw_resources()
     else:
         create_g2pw_converter()
 

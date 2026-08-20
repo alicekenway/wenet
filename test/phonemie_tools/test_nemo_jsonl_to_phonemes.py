@@ -185,7 +185,10 @@ def test_g2pw_failure_reports_jsonl_line_range(tmp_path, monkeypatch):
 
     with pytest.raises(
         RuntimeError,
-        match=r"input lines 1-2: g2p-mix failed for batch item 2",
+        match=(
+            r"input lines 1-2: g2p-mix failed for batch item 2: "
+            r"unsupported transcript; text='坏'"
+        ),
     ):
         converter.convert_manifest(
             input_path=input_path,
@@ -200,6 +203,51 @@ def test_g2pw_failure_reports_jsonl_line_range(tmp_path, monkeypatch):
             progress_every=0,
             backend="g2pw",
         )
+
+
+def test_parallel_g2pw_warms_shared_resources_before_workers(
+    tmp_path,
+    monkeypatch,
+):
+    events = []
+    install_fake_g2p_mix(monkeypatch, outputs={"中国": ("ipa",)})
+
+    def fake_warm_up():
+        events.append("warm-up")
+
+    class RecordingExecutor(InlineExecutor):
+        def __init__(self, max_workers, initializer, initargs):
+            events.append("executor")
+            super().__init__(max_workers, initializer, initargs)
+
+    monkeypatch.setattr(converter, "warm_up_g2pw_resources", fake_warm_up)
+    monkeypatch.setattr(
+        converter.concurrent.futures,
+        "ProcessPoolExecutor",
+        RecordingExecutor,
+    )
+    input_path = tmp_path / "input.jsonl"
+    output_path = tmp_path / "output.jsonl"
+    input_path.write_text(
+        '{"audio_filepath":"/one.wav","text":"中国","duration":1.0}\n',
+        encoding="utf-8",
+    )
+
+    converter.convert_manifest(
+        input_path=input_path,
+        output_path=output_path,
+        espeak_library="unused",
+        language="unused",
+        word_token=None,
+        text_key="text",
+        workers=4,
+        batch_size=1,
+        pending_batches=1,
+        progress_every=0,
+        backend="g2pw",
+    )
+
+    assert events == ["warm-up", "executor"]
 
 
 def test_missing_or_old_g2p_mix_has_install_guidance(monkeypatch):

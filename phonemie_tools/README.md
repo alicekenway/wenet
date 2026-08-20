@@ -46,7 +46,10 @@ The first non-empty G2PW conversion downloads the `pengzhendong/g2pw` model
 snapshot through ModelScope unless it is already cached. Pre-cache it before
 running in an offline environment. Each worker loads its own model, so the
 default for `--backend g2pw` is one worker; increasing `--workers` increases
-memory use.
+memory use. When more than one G2PW worker is requested, the converter first
+performs one mixed Mandarin-English warm-up conversion. This serializes the
+initial ModelScope and g2p-en/NLTK cache setup before the worker processes are
+started.
 
 By default the JSON field named `text` is replaced. Use `--text-key` for a
 different transcript field. Empty transcripts remain empty, blank physical
