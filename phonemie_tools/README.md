@@ -1,0 +1,53 @@
+# Phoneme manifest tools
+
+`nemo_jsonl_to_phonemes.py` converts the transcript field in a UTF-8 JSONL
+manifest to space-separated phoneme tokens. It preserves record order and all
+other JSON fields.
+
+## English and other eSpeak languages
+
+The existing eSpeak backend remains the default:
+
+```bash
+python phonemie_tools/nemo_jsonl_to_phonemes.py \
+  input.jsonl output.jsonl \
+  --backend espeak \
+  --language en-us \
+  --workers 8
+```
+
+`--word-token` controls the eSpeak word-boundary token and defaults to `▁`.
+Use `--word-token none` to disable it.
+
+## Mandarin G2PW IPA
+
+Install the pinned IPA-capable `g2p-mix` revision and its G2PW dependencies:
+
+```bash
+python -m pip install -r phonemie_tools/requirements-g2pw.txt
+```
+
+Then convert Mandarin or mixed Mandarin-English transcripts:
+
+```bash
+python phonemie_tools/nemo_jsonl_to_phonemes.py \
+  input.jsonl output.jsonl \
+  --backend g2pw \
+  --workers 1
+```
+
+The G2PW path writes `g2p-mix`'s IPA `result.phones` directly, separated by
+spaces. Mandarin tone contours are retained and tone sandhi is enabled. It
+does not add a word-boundary token. Unknown Chinese characters are strict: an
+unsupported pronunciation stops conversion instead of silently dropping a
+training label.
+
+The first non-empty G2PW conversion downloads the `pengzhendong/g2pw` model
+snapshot through ModelScope unless it is already cached. Pre-cache it before
+running in an offline environment. Each worker loads its own model, so the
+default for `--backend g2pw` is one worker; increasing `--workers` increases
+memory use.
+
+By default the JSON field named `text` is replaced. Use `--text-key` for a
+different transcript field. Empty transcripts remain empty, blank physical
+lines are skipped, and all non-transcript values are preserved.

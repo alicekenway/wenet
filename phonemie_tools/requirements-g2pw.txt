@@ -1,0 +1,1 @@
+g2p-mix[g2pw] @ git+https://github.com/pengzhendong/g2p-mix.git@36ea4d8c4fdb374a3fb8c260d58afc03436a348b
