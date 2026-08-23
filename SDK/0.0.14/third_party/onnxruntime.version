@@ -1,0 +1,6 @@
+name: onnxruntime
+version: 1.23.2
+linkage: dynamic
+linux_soname: libonnxruntime.so.1
+local_runtime: /home/jinyang_wang/miniforge3/envs/wenet/lib/python3.10/site-packages/onnxruntime/capi/libonnxruntime.so.1.23.2
+headers_used_for_wenet_build: /home/jinyang_wang/Dev/ASR/ASR_wenet/wenet/runtime/onnxruntime/fc_base/onnxruntime-src/include
