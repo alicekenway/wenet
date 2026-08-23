@@ -19,6 +19,12 @@ from itn.english.rules.whitelist import Whitelist
 from itn.english.rules.word import Word
 
 from .rules.context_number import ContextNumber
+from .rules.control import (
+    CompactPercent,
+    ControlNumber,
+    ControlTelephone,
+    ControlToken,
+)
 from .rules.identifier import Identifier
 from .rules.radio import Radio
 
@@ -48,9 +54,17 @@ class InverseNormalizer(UpstreamInverseNormalizer):
         radio = Radio(cardinal, decimal)
         identifier = Identifier(cardinal)
         context_number = ContextNumber(cardinal)
+        control_token = ControlToken()
+        compact_percent = CompactPercent(cardinal)
+        control_number = ControlNumber(cardinal)
+        control_telephone = ControlTelephone()
 
         classify = (
             add_weight(radio.tagger, 0.1)
+            | add_weight(control_telephone.tagger, 0.11)
+            | add_weight(compact_percent.tagger, 0.12)
+            | add_weight(control_token.tagger, 0.13)
+            | add_weight(control_number.tagger, 0.14)
             | add_weight(context_number.tagger, 0.2)
             | add_weight(identifier.tagger, 0.3)
             | add_weight(date.tagger, 1.09)
@@ -72,7 +86,10 @@ class InverseNormalizer(UpstreamInverseNormalizer):
         self.tagger = delete(" ").star + graph + delete(" ").star
 
         verbalizer = (
-            radio.verbalizer | context_number.verbalizer | identifier.verbalizer
+            radio.verbalizer | control_telephone.verbalizer
+            | compact_percent.verbalizer | control_token.verbalizer
+            | control_number.verbalizer
+            | context_number.verbalizer | identifier.verbalizer
             | cardinal.verbalizer | ordinal.verbalizer | decimal.verbalizer
             | date.verbalizer | time.verbalizer | measure.verbalizer
             | money.verbalizer | telephone.verbalizer | electronic.verbalizer

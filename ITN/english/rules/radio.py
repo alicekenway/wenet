@@ -32,13 +32,25 @@ class Radio(Processor):
         decimal = integer + cross(" point ", ".") + fraction
         pair = self.cardinal.graph_two_digit
         year_style = pair + ds + (pair | insert("0") + digit_words)
-        number = decimal | year_style | integer
+        hundreds_style = digit_words + ds + pair
+        number = (
+            decimal | year_style | hundreds_style | integer
+            | cross("a hundred", "100")
+        )
         unit = closure(
             ds + delete(union("megahertz", "kilohertz", "hertz", "mhz", "khz")),
             0, 1,
         )
         value = band + ds + number + unit
         value |= number + unit + ds + band
+
+        # Some control utterances omit the broadcast band or put it earlier:
+        # "tune to nine five point five" and
+        # "tune to the f m station nine five point five".
+        # Include the intent phrase in this token so digit-by-digit readings
+        # are not interpreted as unrelated cardinals by the generic grammar.
+        value |= union("tune to", "play") + " " + number + unit
+        value |= "tune to the " + band + " station " + number + unit
         self.tagger = self.add_tokens(insert('value: "') + value + insert('"'))
 
     def build_verbalizer(self):
