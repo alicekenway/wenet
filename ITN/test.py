@@ -14,6 +14,7 @@ from ITN.english.inverse_normalizer import InverseNormalizer
 
 
 CASES = {
+    "R N B": "R&B",
     "F M one hundred point nine": "FM100.9",
     "tune to two eight point five": "tune to 28.5",
     "tune to three oh point five": "tune to 30.5",

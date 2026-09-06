@@ -1,0 +1,56 @@
+set(ASR_SDK_PUBLIC_HEADERS
+  include/asr_sdk/asr_engine.h
+  include/asr_sdk/c_api.h
+  include/asr_sdk/config.h
+  include/asr_sdk/decode_context.h
+  include/asr_sdk/export.h
+  include/asr_sdk/result.h
+  include/asr_sdk/status.h
+  include/asr_sdk/stream.h
+  include/asr_sdk/version.h)
+
+set(ASR_SDK_BASE_SOURCES
+  src/audio/wav_reader.cc
+  src/package/model_package.cc
+  src/package/model_package_validator.cc
+  src/itn/itn_processor.cc
+  src/sdk/asr_engine.cc
+  src/sdk/c_api.cc
+  src/sdk/result_json.cc
+  src/sdk/status.cc
+  src/sdk/version.cc
+  src/utils/file_utils.cc
+  src/utils/json.cc
+  src/utils/timer.cc)
+
+set(ASR_SDK_LEGACY_SOURCES
+  src/sdk/asr_stream.cc
+  src/wenet_bridge/wenet_result_mapper.cc
+  src/wenet_bridge/wenet_runtime_bridge.cc
+  src/wenet_bridge/wenet_stream_adapter.cc)
+
+set(ASR_SDK_CTC_SOURCES
+  src/sherpa_onnx_wenet/ctc_onnx_backend_factory.cc
+  src/sherpa_onnx_wenet/ctc_greedy_decoder.cc
+  src/sherpa_onnx_wenet/token_table.cc
+  src/sherpa_onnx_wenet/wenet_ctc_onnx_backend.cc
+  src/sherpa_onnx_wenet/whisper_feature_extractor.cc
+  src/sherpa_onnx_wenet/zipformer2_ctc_onnx_backend.cc)
+
+set(ASR_SDK_FLASHLIGHT_SOURCES
+  src/flashlight_decoder/compact_lexicon.cc
+  src/flashlight_decoder/decoded_hypothesis.cc
+  src/flashlight_decoder/compiled_decode_context.cc
+  src/flashlight_decoder/contact_spelling_compiler.cc
+  src/flashlight_decoder/word_spelling_generator.cc
+  src/flashlight_decoder/debug_trace.cc
+  src/flashlight_decoder/dynamic_contact_lexicon.cc
+  src/flashlight_decoder/flashlight_asr_stream.cc
+  src/flashlight_decoder/flashlight_decoder_resource.cc
+  src/flashlight_decoder/flashlight_ctc_stream_decoder.cc
+  src/flashlight_decoder/flashlight_result_mapper.cc
+  src/flashlight_decoder/lexicon_loader.cc
+  src/flashlight_decoder/max_fusion_lm.cc
+  src/flashlight_decoder/multi_trie_lexicon_decoder.cc
+  src/flashlight_decoder/output_sequence_mapper.cc
+  src/flashlight_decoder/word_dictionary.cc)

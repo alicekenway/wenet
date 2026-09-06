@@ -18,6 +18,7 @@ from itn.english.rules.time import Time
 from itn.english.rules.whitelist import Whitelist
 from itn.english.rules.word import Word
 
+from .rules.ampersand import AmpersandSequence
 from .rules.context_number import ContextNumber
 from .rules.control import (
     CompactPercent,
@@ -51,6 +52,7 @@ class InverseNormalizer(UpstreamInverseNormalizer):
         word = Word()
         char = Char()
         punctuation = Punctuation()
+        ampersand_sequence = AmpersandSequence()
         radio = Radio(cardinal, decimal)
         identifier = Identifier(cardinal)
         context_number = ContextNumber(cardinal)
@@ -60,7 +62,8 @@ class InverseNormalizer(UpstreamInverseNormalizer):
         control_telephone = ControlTelephone()
 
         classify = (
-            add_weight(radio.tagger, 0.1)
+            add_weight(ampersand_sequence.tagger, 0.09)
+            | add_weight(radio.tagger, 0.1)
             | add_weight(control_telephone.tagger, 0.11)
             | add_weight(compact_percent.tagger, 0.12)
             | add_weight(control_token.tagger, 0.13)
@@ -86,7 +89,8 @@ class InverseNormalizer(UpstreamInverseNormalizer):
         self.tagger = delete(" ").star + graph + delete(" ").star
 
         verbalizer = (
-            radio.verbalizer | control_telephone.verbalizer
+            ampersand_sequence.verbalizer
+            | radio.verbalizer | control_telephone.verbalizer
             | compact_percent.verbalizer | control_token.verbalizer
             | control_number.verbalizer
             | context_number.verbalizer | identifier.verbalizer
