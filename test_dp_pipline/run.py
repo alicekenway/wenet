@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Shared, standard-library-only dataset runner for SDK 0.0.13 through 0.0.16."""
+"""Shared, standard-library-only dataset runner for SDK 0.0.13 through 0.0.17."""
 import argparse
 from contextlib import contextmanager
 from datetime import datetime
@@ -12,7 +12,8 @@ import subprocess
 import sys
 import tempfile
 
-VERSIONS = ('0.0.13', '0.0.14', '0.0.15', '0.0.16')
+VERSIONS = ('0.0.13', '0.0.14', '0.0.15', '0.0.16', '0.0.17')
+COMPACT_LEXICON_VERSIONS = frozenset(('0.0.16', '0.0.17'))
 FIELDS = {'metadata', 'wav_parent', 'package', 'output_dir',
           'contacts', 'ref_rules', 'mode', 'metric', 'threads', 'itn', 'debug'}
 
@@ -94,7 +95,7 @@ def prepare(args):
     wav_parent = resolve_path(base, config.get('wav_parent', str(metadata.parent)))
     if not wav_parent.is_dir():
         raise ValueError(f'Audio root missing: {wav_parent}')
-    fmt = 'compact' if args.version == '0.0.16' else 'text'
+    fmt = 'compact' if args.version in COMPACT_LEXICON_VERSIONS else 'text'
     package = resolve_path(base, config['package'])
     if 'lm' in modes and fmt == 'compact':
         require_file(package / 'lexicon.bin')
@@ -112,7 +113,7 @@ def prepare(args):
                              'supply a matching package (no implicit conversion).')
         required += ['words', 'lexicon', 'lm_search']
         if fmt == 'compact' and manifest.get('lexicon_format') != 'compact_trie_v1':
-            raise ValueError('SDK 0.0.16 requires lexicon_format=compact_trie_v1')
+            raise ValueError(f'SDK {args.version} requires lexicon_format=compact_trie_v1')
         if config.get('contacts') is not None:
             contacts = require_file(resolve_path(base, config['contacts']))
             if not contacts.read_text(encoding='utf-8').strip():

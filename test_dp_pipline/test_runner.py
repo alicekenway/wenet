@@ -86,7 +86,8 @@ class RunnerTest(unittest.TestCase):
     def test_all_version_contracts_and_actual_subprocess_workflow(self):
         for version in pipeline.VERSIONS:
             with self.subTest(version=version):
-                expected = 'compact' if version == '0.0.16' else 'text'
+                expected = ('compact' if version in pipeline.COMPACT_LEXICON_VERSIONS
+                            else 'text')
                 self.config['package'] = expected
                 self.save()
                 plan = pipeline.prepare(self.args(version))
@@ -193,11 +194,14 @@ class RunnerTest(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, 'matching package'):
             pipeline.prepare(self.args())
 
-    def test_bin_required_only_for_sdk16_lm(self):
+    def test_bin_required_only_for_compact_sdk_lm(self):
         (self.root / 'compact/lexicon.bin').unlink()
-        with self.assertRaisesRegex(ValueError, 'lexicon.bin'):
-            pipeline.prepare(self.args())
-        self.assertEqual(pipeline.prepare(self.args('0.0.16', '--mode', 'greedy'))['rows'], 2)
+        for version in pipeline.COMPACT_LEXICON_VERSIONS:
+            with self.subTest(version=version):
+                with self.assertRaisesRegex(ValueError, 'lexicon.bin'):
+                    pipeline.prepare(self.args(version))
+                self.assertEqual(
+                    pipeline.prepare(self.args(version, '--mode', 'greedy'))['rows'], 2)
         self.config['package'] = 'text'
         self.save()
         self.assertFalse((self.root / 'text/lexicon.bin').exists())

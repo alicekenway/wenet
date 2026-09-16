@@ -6,13 +6,13 @@ without modifying SDK code, generating contact paths, or converting packages.
 ```bash
 python3 wenet/test_dp_pipline/run.py \
   --sdk-dir /home/jinyang_wang/Dev/ASR/ASR_wenet/wenet/SDK \
-  --version 0.0.16 \
+  --version 0.0.17 \
   --test-set /path/to/test_set.json \
   --mode lm --itn off --ref-sub /path/to/ref_text_normalization_rules.tsv
 ```
 
 `--sdk-dir` accepts either the SDK collection root or a version's source directory.
-Supported versions: **0.0.13, 0.0.14, 0.0.15, 0.0.16**. Build that SDK's Linux host
+Supported versions: **0.0.13, 0.0.14, 0.0.15, 0.0.16, 0.0.17**. Build that SDK's Linux host
 `asr_package_eval` first. The runner checks the CMake source version and searches
 `build`, `build_0_0_XX`, and `build_00XX`. It does not select Android/ASan builds
 automatically. Use `--evaluator /path/to/asr_package_eval` for a custom build or
@@ -37,9 +37,9 @@ not the working directory. Example:
 
 There is one package path, with no alternate-package selection or fallback.
 In LM mode, versions 13–15 use the text lexicon and do not require `lexicon.bin`.
-Version 16 requires `lexicon.bin`; a missing file is an error, not a request to
+Versions 16 and 17 require `lexicon.bin`; a missing file is an error, not a request to
 generate it. The manifest must also use the SDK-compatible Flashlight decoder
-type; version 16 requires `compact_trie_v1` and a packaged SentencePiece model
+type; versions 16 and 17 require `compact_trie_v1` and a packaged SentencePiece model
 when contacts are enabled. The runner does not rewrite the manifest. Greedy mode
 only needs AM/token inputs and does not require a lexicon binary for any version.
 
